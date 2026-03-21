@@ -2,10 +2,10 @@ import os
 import tkinter as tk
 from pathlib import Path
 import shutil
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import functools
-
-# TODO Impelement Generator for read url and files
+import threading
+import time
 
 class FileOrganizerGui:
 
@@ -21,7 +21,7 @@ class FileOrganizerGui:
     "documents": [".pdf", ".doc", ".docx", ".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".csv"],
     "videos": [".mp4", ".mkv", ".avi", ".mov", ".wmv"],
     "audio": [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"],
-    "archives": [".zip", ".rar", ".tar", ".gz", ".7z", "iso"],
+    "archives": [".zip", ".rar", ".tar", ".gz", ".7z", ".iso"],
     "programs": [".exe"],
     "folders":[]
 
@@ -50,10 +50,13 @@ class FileOrganizerGui:
 
 
     def define_widgets(self):
+        """
+        Define all widgets
+        """
         
         self.frame_top = tk.Frame(self.master_window, width=800, height=100)
         self.frame_mid = tk.Frame(self.master_window, width=800, height=200)
-        self.frame_bottom = tk.Frame(self.master_window, width=800,)
+        self.frame_bottom = tk.Frame(self.master_window, width=800)
 
         self.frame_left = tk.Frame(self.frame_mid, width=400, height=200)
         self.frame_right = tk.Frame(self.frame_mid, width=400, height=200)
@@ -79,7 +82,13 @@ class FileOrganizerGui:
         self.button_go = tk.Button(self.frame_bottom, command=self.run, text="Transfer")
         self.button_add_source = tk.Button(self.frame_bottom, command=self.add_source_address, text="Add Source Address")
 
+        # Progress Bar
+        self.progress_bar = ttk.Progressbar(self.frame_right, orient="horizontal", length=300, mode="determinate")
+
     def initilize_positioning_of_widgets(self):
+        """
+        Set Position of each widget in the root and frames
+        """
         
         # Frames
         self.frame_top.grid(row=0, column=0,  sticky="nsew")
@@ -88,15 +97,18 @@ class FileOrganizerGui:
         self.frame_right.grid(row=0, column=1, sticky="nsew")
         self.frame_bottom.grid(row=2, column=0, sticky="nsew")
         
+        self.frame_bottom.columnconfigure(0, weight=1)
+        self.frame_right.columnconfigure(0, weight=1)
+        
         # Label
         
-        self.label_top_banner.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
+        self.label_top_banner.grid(row=0, column=2, columnspan=2, sticky=tk.W + tk.E, padx=5, pady=5)
 
-        self.label_source_address.grid(row=0, column=0, sticky=tk.W, padx=5, pady=1)
-        self.label_distination_address.grid(row=1, column=0, sticky=tk.W, ipady=10, padx=1, pady=10)
+        self.label_source_address.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.label_distination_address.grid(row=1, column=0, sticky=tk.W, ipady=10, padx=5, pady=10)
 
         # # ListBox
-        self.source_listbox.grid(row=1, column=0, ipadx=50, ipady=50, sticky=tk.W )
+        self.source_listbox.grid(row=0, column=0, padx=5, ipadx=50, ipady=50, sticky=tk.W + tk.E )
         
         # Entry
         self.entry_source_file_address.grid(
@@ -112,28 +124,49 @@ class FileOrganizerGui:
             column=1, 
             columnspan=2, 
             sticky=tk.W + tk.E, 
-            padx=5, 
+            padx=5,
             pady=10)
 
-        self.label_message_label.grid(row=2, column=0, columnspan=2, sticky=tk.W + tk.E, padx=10, pady=10)
+        self.label_message_label.grid(row=2, column=0,  sticky=tk.W + tk.E, padx=10, pady=10)
         
         # Button
-        self.button_go.grid(row=1, column=0, columnspan=2, sticky=tk.W + tk.E, padx=10, pady=10)
-        self.button_add_source.grid(row=0, column=0, columnspan=2, sticky=tk.W + tk.E, padx=10, pady=10)
+        self.button_go.grid(row=1, column=0,  sticky=tk.W + tk.E, padx=10, pady=10)
+        self.button_add_source.grid(row=0, column=0,  sticky=tk.W + tk.E, padx=10, pady=10)
+
+        # Progress Bar
+        self.progress_bar.grid(row=1, column=0, columnspan=2, sticky=tk.W + tk.E, padx=5, pady=5)
 
     # Decorator
     def check_path(roots="b"):
+        """
+        This decorator check address's come from two entry.
+        Address must be absolute path.
+
+        Args:
+            roots: str
+                b: Check both tk entry
+                s: Check source tk entry
+                d: Check distination tk entry
+        """
         def check_both_address(f):
             @functools.wraps(f)
             def wrapper(self):
                 self.distination_path = Path(self.entry_distination_file_address.get())
                 self.source_path = Path(self.entry_source_file_address.get())
+
                 if roots == "b":
-                    if not self.distination_path.is_absolute() or not self.source_path.is_absolute():
-                        self.label_message_label.configure(text="Check Your Both Address's!")
+                    if self.source_addresses:
+                        if not self.distination_path.is_absolute():
+                            self.label_message_label.configure(text="Check Your Distination Address's!")
+                        else:
+                            result = f(self)
+                            return result
                     else:
-                        result = f(self)
-                        return result
+                        if not self.distination_path.is_absolute() or not self.source_path.is_absolute():
+                            self.label_message_label.configure(text="Check Your Both Address's!")
+                        else:
+                            result = f(self)
+                            return result
                 elif roots == "s":
                     if not self.source_path.is_absolute():
                         self.label_message_label.configure(text="Check Your Source Address!")
@@ -155,12 +188,6 @@ class FileOrganizerGui:
         """
         Retrieves free space information for the given path.
 
-        Args:
-            path: The path to check (e.g., the target directory).
-
-        Returns:
-            A tuple containing (total space, used space, free space) in bytes.
-            Returns None if an error occurs (e.g., path doesn't exist).
         """
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
@@ -181,16 +208,6 @@ class FileOrganizerGui:
 
         return wrapper
 
-    @check_path(roots="s")
-    def add_source_address(self):
-            """Adds a source address to the list."""
-            address = self.entry_source_file_address.get()
-            if address:
-                self.source_addresses.append(address)
-                self.source_listbox.insert(tk.END, address)
-                self.label_message_label.configure(text=f"The address is added")
-                self.entry_source_file_address.delete(0, tk.END)
-
     def create_category_directories(self, distination_path:str) -> None:
         """
         Create all empty directories in distination path.
@@ -202,6 +219,19 @@ class FileOrganizerGui:
         self.label_message_label.configure(text="Creating Folders Please Wait ...")
         for category, _ in self.FILE_CATEGORIES.items():
             (distination_path / category).mkdir(parents=True, exist_ok=True)
+
+
+    def multi_search_and_categorize_files(self) -> None:
+        """
+        Read address's fromo the listbox and call search_and_categorize_files method
+        on them.
+        """
+        for index in range(len(self.source_addresses)):
+            # self.source_listbox.insert(index, "> " + self.source_addresses[index])
+
+            self.search_and_categorize_files(self.distination_path, Path(self.source_addresses[index]))
+            # self.source_listbox.insert(index, self.source_addresses[index])
+            
 
     @check_disk_space_info
     def search_and_categorize_files(self, distination_path:str, source_path:str) -> None:
@@ -215,20 +245,16 @@ class FileOrganizerGui:
                 Source folder Address.
         """
         self.label_message_label.configure(text="Find and transfering files. Please wait ...")
+        total_files = 0
+        for root, _, files in os.walk(source_path):
+            total_files += len(files)
 
-        for item in (source_path).rglob("*"):
-            # if its folder
-            print(item)
+        self.progress_bar["maximum"] = total_files
+        current_file_count = 0
+        # def worker():
+        for item in (source_path).glob("*"):
             if item.is_dir():
-                try:
-                    # shutil.copytree(item, distination_path / "folders", dirs_exist_ok=True) 
-                    continue
-                except shutil.Error as e:
-                    if "already exists" in str(e):
-                        new_filename = item.name.rsplit('.', 1)[0] + "_1"
-                        new_destination = distination_path / "folders" / new_filename
-                        shutil.copy(item, new_destination)
-                        self.label_message_label.configure(text=f"Renamed file to {new_filename} and moved to {distination_path}")
+                continue
             else:
                 # Its a file
                 for category, extentions in self.FILE_CATEGORIES.items():
@@ -248,16 +274,57 @@ class FileOrganizerGui:
                                 # Re-raise the error if it's not a "destination exists" error
                                 messagebox.showerror("Error", f"{e}")
                                 raise e  # Important to re-raise for unexpected errors
-                            
-        self.label_message_label.configure(text="Tranfering is DONE!")
+                        
+                        current_file_count += 1
+                        self.progress_bar["value"] = current_file_count
+                        self.progress_bar.update()        
+
     
+    @check_path(roots="s")
+    def add_source_address(self):
+            """Adds a source address to the list."""
+            address = self.entry_source_file_address.get()
+            if address:
+                self.source_addresses.append(address)
+                self.source_listbox.insert(tk.END, address)
+                self.label_message_label.configure(text=f"The address is added")
+                self.entry_source_file_address.delete(0, tk.END)
+
     @check_path(roots="b")
     def run(self):
-
+        """
+        Start the file creation at the Distination Path, and transfer files from 
+        Source Path.
+        """
         self.distination_path = self.distination_path / self.distination_file_name
         self.create_category_directories(self.distination_path)
-        self.search_and_categorize_files(self.distination_path, self.source_path)
 
+        self.button_go.config(state=tk.DISABLED)
+        self.button_add_source.config(state=tk.DISABLED)
+        self.label_message_label.config(text="Transfering files...")
+        self.progress_bar["maximum"] = 100
+        self.progress_bar.start()
+        
+        def worker():
+            try:
+                if self.source_listbox:
+                    self.multi_search_and_categorize_files()
+                    self.label_message_label.config(text="Transfering is DONE!")
+                else:
+                    self.search_and_categorize_files(self.distination_path, self.source_path)
+                    self.label_message_label.config(text="Transfering is DONE!")
+            except Exception as e:
+                
+                messagebox.showerror("Error", str(e))
+                raise e
+            finally:
+                self.button_go.config(state=tk.NORMAL)
+                self.button_add_source.config(state=tk.NORMAL)
+                self.progress_bar.stop()
+                self.progress_bar["value"] = 0
+        
+        thread = threading.Thread(target=worker)
+        thread.start()
 
         
 
