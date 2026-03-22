@@ -1,3 +1,6 @@
+.venv
+__pychache__
+
 test.py
 helper_functions.py
-.venv
+

@@ -14,5 +14,12 @@ class MyClass:
     def greet(self):
         print("Hello from greet!")
 
-my_object = MyClass("Custom Message")
-my_object.greet()
+def test(a):
+    print("salam {a}")
+
+if __name__ == "__main__":
+    # my_object = MyClass("Custom Message")
+    # my_object.greet()
+    num = 25  
+    print(bin(num), oct(num), hex(num))
+        
