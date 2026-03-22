@@ -380,6 +380,6 @@ class FileOrganizerGui:
         thread = threading.Thread(target=worker)
         thread.start()
 
-class FileOrganizerLogic:
-    def __init__(self):
-        pass
+class FileOrganizerController:
+    def __init__(self, front_obj):
+        self.fron = front_obj
