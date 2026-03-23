@@ -1,7 +1,7 @@
 import tkinter as tk
-from file_organizer_gui import FileOrganizerGui
+from file_organizer_gui import FileOrganizerGUI
 
 window = tk.Tk()
-FileOrganizerGui(window)
+FileOrganizerGUI(window)
 
 window.mainloop()
