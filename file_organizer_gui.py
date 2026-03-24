@@ -5,7 +5,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from file_organizer_logic import FileOrganizerLogic
 from file_organizer_custom_exceptions import (
-    BothPathWrong, DestinationPathWrong, SourcePathWrong
+    BothPathWrong, DestinationPathWrong, SourcePathWrong, NotEnoughSpace
     )
 
 
@@ -74,15 +74,16 @@ class FileOrganizerGUI:
         self.entry_source_file_address = tk.Entry(self.frame_left)
 
         # Buttons
-        self.button_shallow_copy = tk.Button(self.frame_bottom, command=self.shallow_copy, text="Shallow Copy")
-        self.button_deep_copy = tk.Button(self.frame_bottom, text="Deep Copy")
-        self.button_shallow_cup = tk.Button(self.frame_bottom, command=self.shallow_copy, text="Shallow Cut")
-        self.button_deep_cut = tk.Button(self.frame_bottom, text="Deep Cut")
+        self.button_shallow_copy = tk.Button(self.frame_bottom, command=lambda : self.transfer(mode=0), text="Shallow Copy")
+        self.button_deep_copy = tk.Button(self.frame_bottom, command=lambda: self.transfer(mode=2), text="Deep Copy")
+        self.button_shallow_cut = tk.Button(self.frame_bottom, command=lambda:self.transfer(mode=1), text="Shallow Cut")
+        self.button_deep_cut = tk.Button(self.frame_bottom,command=lambda: self.transfer(mode=3), text="Deep Cut")
         self.button_add_source = tk.Button(
             self.frame_bottom,
             command=self.add_source_address,
             text="Add Source Address",
         )
+        self.button_clear_list = tk.Button(self.frame_bottom, command=self.clear_list, text="clear list")
 
         # Progress Bar
         self.progress_bar = ttk.Progressbar(
@@ -135,11 +136,14 @@ class FileOrganizerGUI:
 
         # Button
         self.button_add_source.grid(
-            row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=10
+            row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=5
+        )
+        self.button_clear_list.grid(
+            row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=5
         )
         self.button_shallow_copy.grid(row=1, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
         self.button_deep_copy.grid(row=2, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
-        self.button_shallow_cup.grid(row=3, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_shallow_cut.grid(row=3, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
         self.button_deep_cut.grid(row=4, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
 
         # Progress Bar
@@ -147,6 +151,9 @@ class FileOrganizerGUI:
             row=1, column=0, columnspan=2, sticky=tk.W + tk.E, padx=5, pady=5
         )
 
+    def clear_list(self):
+        self.source_listbox.delete(0, tk.END)
+        self.source_addresses_list = []
 
     def add_source_address(self):
         """Adds a source address to the source listbox and list."""
@@ -158,11 +165,18 @@ class FileOrganizerGUI:
             self.entry_source_file_address.delete(0, tk.END)
 
 
-    def shallow_copy(self):
+    def desable_and_enable(mode, *args):
+        if mode == 0:
+            [key.config(state=tk.DISABLED) for key in args]
+        elif mode == 1:
+            [key.config(state=tk.NORMAL) for key in args]
+
+    def transfer(self, mode):
         """
         Start the file creation at the Distination Path, and transfer files from
         Source Path.
         """
+        
         # Convert str address to the Path object and keep then in the attributes.
         self.source_path = Path(self.entry_source_file_address.get())
         self.distination_path = Path(self.entry_distination_file_address.get())
@@ -176,40 +190,51 @@ class FileOrganizerGUI:
             
             # Set the app folder name to the distination adress.
             self.distination_path = self.distination_path / self.distination_file_name
-            
-            # Check if Distination path have space
-            FileOrganizerLogic.check_disk_space_info(self.distination_path)
-            
+
             # Create folders if not exists.
             self.controller.create_category_directories(self.distination_path)
-
+        
+            # Check if Distination path have space
+            FileOrganizerLogic.check_disk_space(self.source_path, self.distination_path)
+        
             # Disable all buttons when app wants to start transfering files.
-            self.button_shallow_copy.config(state=tk.DISABLED)
-            self.button_add_source.config(state=tk.DISABLED)
+            self.desable_and_enable(
+                0,
+                self.button_add_source,
+                self.button_deep_copy,
+                self.button_deep_cut,
+                self.button_shallow_copy,
+                self.button_shallow_cut
+            )
             self.label_message_label.config(text="Transfering files...", fg="black")
-            self.progress_bar["maximum"] = 100
-            self.progress_bar.start()
+            # self.progress_bar["maximum"] = 100
+            # self.progress_bar.start()
+            
 
             # Create a thread
             def worker():
                 
                 try:
+                    self.label_message_label.config(text="Transfering Files Please Wait ...", fg="black")
+
                     # We have list of source addresses
                     if self.source_addresses_list:
-                        print("We have list of address")
+                        
                         self.controller.multi_search_and_categorize_files(
                             self.source_addresses_list, 
                             self.distination_path,
+                            mode,
                             self.progress_bar
                             )
+                        
+                        self.source_addresses_list = []
+                        self.source_listbox.delete(0, tk.END)
                         self.label_message_label.config(text="Transfering is DONE!", fg="green")
                     
                     # Only one source address exist
                     else:
-                        self.label_message_label.config(text="Transfering Files Please Wait ...", fg="black")
-                        print(type(self.distination_path), type(self.source_path))
                         self.controller.search_and_categorize_files(
-                            self.distination_path, self.source_path, self.progress_bar
+                            self.distination_path, self.source_path, mode, self.progress_bar
                         )
                         self.label_message_label.config(text="Transfering is DONE!", fg="green")
                 except Exception as e:
@@ -217,10 +242,21 @@ class FileOrganizerGUI:
                     raise e
                 # Buttons back to normal.
                 finally:
-                    self.button_shallow_copy.config(state=tk.NORMAL)
-                    self.button_add_source.config(state=tk.NORMAL)
-                    self.progress_bar.stop()
-                    self.progress_bar["value"] = 0
+                    self.desable_and_enable(
+                        1,
+                        self.button_add_source,
+                        self.button_deep_copy,
+                        self.button_deep_cut,
+                        self.button_shallow_copy,
+                        self.button_shallow_cut
+                    )
+
+                    msgreport = "\n".join([x for x in FileOrganizerLogic.TRANSFER_LIST])
+                    with open(".\\report.txt", "w") as report:
+                        report.write(msgreport)
+                        
+                    messagebox.showinfo("Files", "Report is created!")
+                    
 
             thread = threading.Thread(target=worker)
             thread.start()
@@ -233,6 +269,10 @@ class FileOrganizerGUI:
             messagebox.showerror("Path Error", "Please check your Source address's.")
         except shutil.SameFileError:
             messagebox.showerror("Error", )
+        except FileNotFoundError:
+            messagebox.showerror("FileError", "Your address is not exist!")
+        except NotEnoughSpace:
+            messagebox.showerror("SpaceError", "Your destination file do not have enough space for transfering source data to it.")
         except Exception as e:
             raise e
             

@@ -31,7 +31,8 @@ class FileOrganizerLogic:
         "programs": [".exe"],
         "folders": [],
         }
-    
+    TRANSFER_LIST = []
+
     @staticmethod
     def check_path(
             source_path:Path, 
@@ -63,7 +64,6 @@ class FileOrganizerLogic:
         """
         # Check both path from tk entries.
         if roots == "b":
-            print(True if list_address else False)
             if list_address:
                 if not destination_path.is_absolute():
                     raise DestinationPathWrong
@@ -83,25 +83,47 @@ class FileOrganizerLogic:
                 raise DestinationPathWrong
     
     @staticmethod
-    def check_disk_space_info(source_path:Path, destination_pth:Path) -> None:
+    def get_folder_size(folder_path:Path) -> int:
+        """
+        Calcuate total size of a path (it suppose to be a foler.)
+
+        Args:
+            folder_path: Path obj
+                Address of your folder
+
+        Return:
+            total_size: int
+                Total size of folder
+        """
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(folder_path):
+            for file_name in filenames:
+                filename_path = os.path.join(dirpath, file_name)
+                # skip if it is symbolic link
+                if not os.path.islink(filename_path):
+                    total_size += os.path.getsize(filename_path)
+        return total_size
+
+
+    @classmethod
+    def check_disk_space(cls, source_path:Path, destination_pth:Path) -> None:
         """
         Retrieves free space information for the given path.
 
         """
         try:
             destination_total, destination_used, destination_free = shutil.disk_usage(destination_pth)
-            source_total, source_used, source_free = shutil.disk_usage(source_path)
-
-            # return total, used, free
-        except FileNotFoundError:
-            raise Exception("Invalid target path.")
+            source_total_size = cls.get_folder_size(source_path)
+            
+        except FileNotFoundError as e:
+            raise FileNotFoundError
         
-        if source_total >= destination_free:
-            raise Exception
+        if source_total_size >= destination_free:
+            raise NotEnoughSpace
             
 
-        if destination_free < 1024 * 1024 * 100:
-            raise NotEnoughSpace("Not enough disk space availible in destination path.")
+        # if destination_free < 1024 * 1024 * 100:
+        #     raise NotEnoughSpace("Not enough disk space availible in destination path.")
             
     @classmethod
     def create_category_directories(cls, distination_path: str) -> None:
@@ -118,7 +140,8 @@ class FileOrganizerLogic:
 
     def multi_search_and_categorize_files(self, 
                                         source_path_list:list, 
-                                        destination_path:Path, 
+                                        destination_path:Path,
+                                        mode,
                                         progressbar
                                         ) -> None:
         """
@@ -128,7 +151,8 @@ class FileOrganizerLogic:
         # list(map(lambda address: self.search_and_categorize_files(destination_path, Path(address), progressbar), source_path_list))
         for address in source_path_list:
             self.search_and_categorize_files(destination_path, 
-                                        Path(address), 
+                                        Path(address),
+                                        mode,
                                         progressbar)
         
 
@@ -146,10 +170,66 @@ class FileOrganizerLogic:
                 counter += 1
             else:
                 return destination_file 
-            
+    
+    @staticmethod
+    def transfer_set_setting(transfer_mode:int, address: Path) -> tuple:
+        """
+        Set useing move or copy and see the currend dir or dir + all sub dirs
+
+        Args:
+            transfer_mode: int
+                0: shallow copy (use copy and only see the dir root)
+                1: shallow cut (use move and only see the dir rooe)
+                2: deep copy (use copy and see root and all sub dirs)
+                3: deep cut (use move and see root and all sub dirs)
+        
+        Returns:
+            items, use_move as tuple
+        """
+        # Shallow Copy
+        if transfer_mode == 0:
+            items = (address).glob("*")
+            use_move = False
+        # Shallow Cut
+        elif transfer_mode == 1:
+            items = (address).glob("*")
+            use_move = True
+        # Deep Copy
+        elif transfer_mode == 2:
+            items = (address).rglob("*")
+            use_move = False
+        # Deep Cut
+        elif transfer_mode == 3:
+            items = (address).rglob("*")
+            use_move = True
+        else:
+            raise ValueError("Invalid transfering_mode")
+        
+        return items, use_move
+
+    @classmethod
+    def get_number_of_files(cls, address, transfer_mode):
+        """
+        Return the total files in the path
+
+        Args: 
+            address: Path
+                Address of the folder you want to check.
+        Returns:
+            total_fiels: int
+                number of files into the address you pass as the argument.
+        """
+        items, _ = cls.transfer_set_setting(transfer_mode, address)
+        total_files = 0
+        for item in items:
+            if item.is_file():
+                total_files += 1
+
+        return total_files
+
 
     def search_and_categorize_files(
-        self, distination_path: str, source_path: str, progress_bar
+        self, distination_path: str, source_path: str, transfering_mode:int, progress_bar
     ) -> None:
         """
         Search all files in all folders from source path and move them to the distination file path.
@@ -160,35 +240,53 @@ class FileOrganizerLogic:
             source_path: str
                 Source folder Address.
         """
-        
+    
+        # Set setting for transfering files.
+        items, use_move = self.transfer_set_setting(transfering_mode, source_path)
         # Set progress bar settings
-        total_files = 0
-        for root, _, files in os.walk(source_path):
-            total_files += len(files)
-
-        progress_bar["maximum"] = total_files
+        total_files = self.get_number_of_files(source_path, transfering_mode)
         current_file_count = 0
+        progress_bar["maximum"] = 100
+        progress_bar.start()
         
-        for item in (source_path).glob("*"):
+
+        # Shallow Copy. Do not going into the folders.
+        for item in items:
+            # In shallow copy and cut we do not touch the folders
             if item.is_dir():
-                # print(f"We find a Folder but we do nothing and going another element.")
                 continue
             else:
                 # Its a file
+                
                 for category, extentions in self.FILE_CATEGORIES.items():
                     if item.suffix in extentions:
                         try:
                             
                             destination = self.create_new_file_name(distination_path, category, item)
-                            shutil.copy(item, destination)
+                            if use_move:
+                                shutil.move(item, destination)
+                            else:
+                                shutil.copy(item, destination)
+                            
+                            print(item)
+                            self.TRANSFER_LIST.append(item.name)
 
+                            current_file_count += 1
+                            progress = (current_file_count / total_files) * 100
+                            progress_bar["value"] = progress
+                            progress_bar.update()
+                            
                         except shutil.SameFileError:
                             raise shutil.SameFileError
                         
                         except shutil.Error as e:
                             # Re-raise the error if it's not a "destination exists" error
                             raise e  # Important to re-raise for unexpected errors
+            
+        
+        progress_bar.stop()
+        progress_bar["value"] = 0
+            
 
-                        current_file_count += 1
-                        progress_bar["value"] = current_file_count
-                        progress_bar.update()
+if __name__ == "__main__":
+    print("It seems you need to use me in other class!")

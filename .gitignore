@@ -38,4 +38,5 @@ config.ini
 
 # Files for test
 test.py
-helper_function.py
+helper_functions.py
+report.txt
