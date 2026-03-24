@@ -176,7 +176,7 @@ class FileOrganizerGUI:
             
             # Set the app folder name to the distination adress.
             self.distination_path = self.distination_path / self.distination_file_name
-
+            
             # Check if Distination path have space
             FileOrganizerLogic.check_disk_space_info(self.distination_path)
             

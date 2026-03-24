@@ -37,5 +37,5 @@ secrets.txt
 config.ini
 
 # Files for test
-helper_functions.py
 test.py
+helper_function.py

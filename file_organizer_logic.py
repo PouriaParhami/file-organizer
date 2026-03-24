@@ -1,6 +1,14 @@
-# Decorator
+import os
 import shutil
 from pathlib import Path
+from file_organizer_custom_exceptions import (
+    BothPathWrong, DestinationPathWrong, SourcePathWrong, NotEnoughSpace
+    )
+
+# TODO change the static methods name
+# TODO handel static method exception in one uper level
+# TODO is shutil can raise error if the file in source and distination paht have same name?
+# TODO Create deep copy and deep move logic
 
 class FileOrganizerLogic:
 
@@ -24,7 +32,8 @@ class FileOrganizerLogic:
         "folders": [],
         }
     
-    def check_path(self,
+    @staticmethod
+    def check_path(
             source_path:Path, 
             destination_path:Path, 
             list_address:list=None, 
@@ -54,42 +63,48 @@ class FileOrganizerLogic:
         """
         # Check both path from tk entries.
         if roots == "b":
+            print(True if list_address else False)
             if list_address:
                 if not destination_path.is_absolute():
-                    raise Exception("Check youe destinatiton path folder!")
+                    raise DestinationPathWrong
             else:
                 if (
                     not destination_path.is_absolute()
                     or not source_path.is_absolute()
                 ):
-                    raise Exception("Check Your Both Address's!") 
+                    raise BothPathWrong
         # Check only source input folder path.
         elif roots == "s":
             if not source_path.is_absolute():
-                raise "Check Your Source Address!"
+                raise SourcePathWrong
         # Check only destination input folder path.
         elif roots == "d":
             if not destination_path.is_absolute():
-                raise "Check Your Destination Address!"
+                raise DestinationPathWrong
     
-
-    def check_disk_space_info(self, destination_pth:Path) -> None:
+    @staticmethod
+    def check_disk_space_info(source_path:Path, destination_pth:Path) -> None:
         """
         Retrieves free space information for the given path.
 
         """
         try:
-            total, used, free = shutil.disk_usage(destination_pth)
+            destination_total, destination_used, destination_free = shutil.disk_usage(destination_pth)
+            source_total, source_used, source_free = shutil.disk_usage(source_path)
+
             # return total, used, free
         except FileNotFoundError:
-            raise "Invalid target path."
+            raise Exception("Invalid target path.")
+        
+        if source_total >= destination_free:
+            raise Exception
             
 
-        if free < 1024 * 1024 * 100:
-            raise "Not enough disk space availible."
+        if destination_free < 1024 * 1024 * 100:
+            raise NotEnoughSpace("Not enough disk space availible in destination path.")
             
-    
-    def create_category_directories(self, distination_path: str) -> None:
+    @classmethod
+    def create_category_directories(cls, distination_path: str) -> None:
         """
         Create all empty directories in distination path.
 
@@ -97,37 +112,44 @@ class FileOrganizerLogic:
             distination_path: str
                 Distination folder address.
         """
-        for category, _ in self.FILE_CATEGORIES.items():
+        for category, _ in cls.FILE_CATEGORIES.items():
             (distination_path / category).mkdir(parents=True, exist_ok=True)
 
 
-    def multi_search_and_categorize_files(self) -> None:
+    def multi_search_and_categorize_files(self, 
+                                        source_path_list:list, 
+                                        destination_path:Path, 
+                                        progressbar
+                                        ) -> None:
         """
-        Read address's fromo the listbox and call search_and_categorize_files method
+        Read address's from the listbox and call search_and_categorize_files method
         on them.
         """
-        for index in range(len(self.source_addresses)):
-            # self.source_listbox.insert(index, "> " + self.source_addresses[index])
+        # list(map(lambda address: self.search_and_categorize_files(destination_path, Path(address), progressbar), source_path_list))
+        for address in source_path_list:
+            self.search_and_categorize_files(destination_path, 
+                                        Path(address), 
+                                        progressbar)
+        
 
-            self.search_and_categorize_files(
-                self.distination_path, Path(self.source_addresses[index])
-            )
-            # self.source_listbox.insert(index, self.source_addresses[index])
-
-
-    def check_source_name(self, distination_path, category, item):
+    @staticmethod
+    def create_new_file_name(distination_path, category, item):
+        """
+        Create new file name by adding number.
+        """
         counter = 1
+        destination_file = distination_path / category / item.name
         while True:
-            if Path.exists(destination):
+            if Path.exists(destination_file):
                 new_filename = f"{item.stem}_{counter}{item.suffix}"
-                destination = distination_path / category / new_filename
+                destination_file = distination_path / category / new_filename
                 counter += 1
             else:
-                return destination 
+                return destination_file 
             
-        
+
     def search_and_categorize_files(
-        self, distination_path: str, source_path: str
+        self, distination_path: str, source_path: str, progress_bar
     ) -> None:
         """
         Search all files in all folders from source path and move them to the distination file path.
@@ -138,42 +160,35 @@ class FileOrganizerLogic:
             source_path: str
                 Source folder Address.
         """
-        self.label_message_label.configure(
-            text="Find and transfering files. Please wait ..."
-        )
+        
+        # Set progress bar settings
         total_files = 0
         for root, _, files in os.walk(source_path):
             total_files += len(files)
 
-        self.progress_bar["maximum"] = total_files
+        progress_bar["maximum"] = total_files
         current_file_count = 0
-        # def worker():
+        
         for item in (source_path).glob("*"):
             if item.is_dir():
-                print(f"We find a Folder but we do nothing and going another element.")
+                # print(f"We find a Folder but we do nothing and going another element.")
                 continue
             else:
                 # Its a file
                 for category, extentions in self.FILE_CATEGORIES.items():
                     if item.suffix in extentions:
                         try:
-                            print(f"transfer {item} ==> distination_path / category ")
                             
-                            destination = distination_path / category / item.name
-                            destination = self.check_source_name(destination, category, item)
+                            destination = self.create_new_file_name(distination_path, category, item)
                             shutil.copy(item, destination)
 
-                        except shutil.SameFileError as e:
-                            messagebox.showerror(
-                                "Error",
-                                f"Your source address{source_path} and distination address {distination_path} are the same.",
-                            )
+                        except shutil.SameFileError:
+                            raise shutil.SameFileError
+                        
                         except shutil.Error as e:
-                            print(f"We have {e} error for {item} => {distination_path / category}")
                             # Re-raise the error if it's not a "destination exists" error
-                            messagebox.showerror("Error", f"{e}")
                             raise e  # Important to re-raise for unexpected errors
 
                         current_file_count += 1
-                        self.progress_bar["value"] = current_file_count
-                        self.progress_bar.update()
+                        progress_bar["value"] = current_file_count
+                        progress_bar.update()
