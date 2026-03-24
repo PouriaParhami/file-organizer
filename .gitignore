@@ -1,5 +1,41 @@
-.venv
-__pychache__
+# Compiled Python code
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-test.py
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE-specific files
+.idea/
+*.iml
+*.ipdb
+
+# OS-specific files
+.DS_Store
+
+# Log files
+*.log
+
+# Data files (if not versioned)
+data/
+
+# Temporary files
+tmp/
+temp/
+
+# Build artifacts
+dist/
+build/
+
+# Secrets and credentials (VERY IMPORTANT!)
+*.env
+secrets.txt
+config.ini
+
+# Files for test
 helper_functions.py
+test.py
