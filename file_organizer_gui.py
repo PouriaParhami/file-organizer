@@ -1,8 +1,12 @@
 import tkinter as tk
 import threading
+import shutil
 from pathlib import Path
 from tkinter import messagebox, ttk
 from file_organizer_logic import FileOrganizerLogic
+from file_organizer_custom_exceptions import (
+    BothPathWrong, DestinationPathWrong, SourcePathWrong
+    )
 
 
 class FileOrganizerGUI:
@@ -58,19 +62,22 @@ class FileOrganizerGUI:
             self.frame_left, text="distination Address"
         )
         self.label_source_address = tk.Label(self.frame_left, text="Source Address")
-        self.label_message_label = tk.Label(self.frame_bottom, text="Ready To work!")
+        self.label_message_label = tk.Label(self.frame_left, text="Ready To work!")
 
-        # ListBox
+        # ListBoxs
         self.source_listbox = tk.Listbox(
             self.frame_right,
         )
 
-        # Entry
+        # Entrys
         self.entry_distination_file_address = tk.Entry(self.frame_left)
         self.entry_source_file_address = tk.Entry(self.frame_left)
 
-        # Button
-        self.button_go = tk.Button(self.frame_bottom, command=self.run, text="Transfer")
+        # Buttons
+        self.button_shallow_copy = tk.Button(self.frame_bottom, command=self.shallow_copy, text="Shallow Copy")
+        self.button_deep_copy = tk.Button(self.frame_bottom, text="Deep Copy")
+        self.button_shallow_cup = tk.Button(self.frame_bottom, command=self.shallow_copy, text="Shallow Cut")
+        self.button_deep_cut = tk.Button(self.frame_bottom, text="Deep Cut")
         self.button_add_source = tk.Button(
             self.frame_bottom,
             command=self.add_source_address,
@@ -109,6 +116,9 @@ class FileOrganizerGUI:
         self.label_distination_address.grid(
             row=1, column=0, sticky=tk.W, ipady=10, padx=5, pady=10
         )
+        self.label_message_label.grid(
+            row=2, column=0, sticky=tk.W + tk.E, padx=10, pady=10
+        )
 
         # # ListBox
         self.source_listbox.grid(
@@ -123,15 +133,14 @@ class FileOrganizerGUI:
             row=1, column=1, columnspan=2, sticky=tk.W + tk.E, padx=5, pady=10
         )
 
-        self.label_message_label.grid(
-            row=2, column=0, sticky=tk.W + tk.E, padx=10, pady=10
-        )
-
         # Button
-        self.button_go.grid(row=1, column=0, sticky=tk.W + tk.E, padx=10, pady=10)
         self.button_add_source.grid(
-            row=0, column=0, sticky=tk.W + tk.E, padx=10, pady=10
+            row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=10
         )
+        self.button_shallow_copy.grid(row=1, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_deep_copy.grid(row=2, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_shallow_cup.grid(row=3, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_deep_cut.grid(row=4, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
 
         # Progress Bar
         self.progress_bar.grid(
@@ -145,11 +154,11 @@ class FileOrganizerGUI:
         if source_path:
             self.source_addresses_list.append(source_path)
             self.source_listbox.insert(tk.END, source_path)
-            self.label_message_label.configure(text=f"The address is added")
+            self.label_message_label.configure(text=f"The address is added", fg="blue")
             self.entry_source_file_address.delete(0, tk.END)
 
 
-    def run(self):
+    def shallow_copy(self):
         """
         Start the file creation at the Distination Path, and transfer files from
         Source Path.
@@ -157,58 +166,75 @@ class FileOrganizerGUI:
         # Convert str address to the Path object and keep then in the attributes.
         self.source_path = Path(self.entry_source_file_address.get())
         self.distination_path = Path(self.entry_distination_file_address.get())
-
-        print(f"destination path ==>{self.distination_path.root}", type(self.source_path))
-        print(f"source path ==> {self.source_path}")
-
-        # Check both address fron tk entries.
+        
         try:
+            # Check both address fron tk entries.
             self.controller.check_path(source_path=self.source_path, 
                                     destination_path=self.distination_path, 
                                     list_address=self.source_addresses_list, 
                                     roots="b")
-
-        except Exception as e:
-            # raise e
-            self.label_message_label.config(text=f"{e}")
-
-        # Set the app folder name to the distination adress.
-        # self.distination_path = self.distination_path / self.distination_file_name
-
-        # # Create folders if not exists.
-        # self.controller.create_category_directories(self.distination_path)
-
-        # # Disable all buttons when app wants to start transfering files.
-        # self.button_go.config(state=tk.DISABLED)
-        # self.button_add_source.config(state=tk.DISABLED)
-        # self.label_message_label.config(text="Transfering files...")
-        # self.progress_bar["maximum"] = 100
-        # self.progress_bar.start()
-
-        # def worker():
             
-        #     try:
-        #         # We have list of source addresses
-        #         if self.source_addresses_list:
-        #             print("We have list of address")
-        #             self.multi_search_and_categorize_files()
-        #             self.label_message_label.config(text="Transfering is DONE!")
-                
-        #         # Only one source address exist
-        #         else:
-        #             self.controller.search_and_categorize_files(
-        #                 self.distination_path, self.source_path
-        #             )
-        #             self.label_message_label.config(text="Transfering is DONE!")
-        #     except Exception as e:
-        #         messagebox.showerror("Error", str(e))
-        #         raise e
-        #     # Buttons back to normal.
-        #     finally:
-        #         self.button_go.config(state=tk.NORMAL)
-        #         self.button_add_source.config(state=tk.NORMAL)
-        #         self.progress_bar.stop()
-        #         self.progress_bar["value"] = 0
+            # Set the app folder name to the distination adress.
+            self.distination_path = self.distination_path / self.distination_file_name
 
-        # thread = threading.Thread(target=worker)
-        # thread.start()
+            # Check if Distination path have space
+            FileOrganizerLogic.check_disk_space_info(self.distination_path)
+            
+            # Create folders if not exists.
+            self.controller.create_category_directories(self.distination_path)
+
+            # Disable all buttons when app wants to start transfering files.
+            self.button_shallow_copy.config(state=tk.DISABLED)
+            self.button_add_source.config(state=tk.DISABLED)
+            self.label_message_label.config(text="Transfering files...", fg="black")
+            self.progress_bar["maximum"] = 100
+            self.progress_bar.start()
+
+            # Create a thread
+            def worker():
+                
+                try:
+                    # We have list of source addresses
+                    if self.source_addresses_list:
+                        print("We have list of address")
+                        self.controller.multi_search_and_categorize_files(
+                            self.source_addresses_list, 
+                            self.distination_path,
+                            self.progress_bar
+                            )
+                        self.label_message_label.config(text="Transfering is DONE!", fg="green")
+                    
+                    # Only one source address exist
+                    else:
+                        self.label_message_label.config(text="Transfering Files Please Wait ...", fg="black")
+                        print(type(self.distination_path), type(self.source_path))
+                        self.controller.search_and_categorize_files(
+                            self.distination_path, self.source_path, self.progress_bar
+                        )
+                        self.label_message_label.config(text="Transfering is DONE!", fg="green")
+                except Exception as e:
+                    messagebox.showerror("Error", str(e))
+                    raise e
+                # Buttons back to normal.
+                finally:
+                    self.button_shallow_copy.config(state=tk.NORMAL)
+                    self.button_add_source.config(state=tk.NORMAL)
+                    self.progress_bar.stop()
+                    self.progress_bar["value"] = 0
+
+            thread = threading.Thread(target=worker)
+            thread.start()
+
+        except BothPathWrong:
+            messagebox.showerror("Path Error", "Please check your Both address's. They must be Absoulute Path")
+        except DestinationPathWrong:
+            messagebox.showerror("Path Error", "Please check your Destination address's.")
+        except SourcePathWrong:
+            messagebox.showerror("Path Error", "Please check your Source address's.")
+        except shutil.SameFileError:
+            messagebox.showerror("Error", )
+        except Exception as e:
+            raise e
+            
+
+        
