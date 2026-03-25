@@ -7,7 +7,7 @@ from file_organizer_logic import FileOrganizerLogic
 from file_organizer_custom_exceptions import (
     BothPathWrong, DestinationPathWrong, SourcePathWrong, NotEnoughSpace
     )
-
+from transfer_mode import TransferMode
 
 class FileOrganizerGUI:
     """
@@ -74,10 +74,10 @@ class FileOrganizerGUI:
         self.entry_source_file_address = tk.Entry(self.frame_left)
 
         # Buttons
-        self.button_shallow_copy = tk.Button(self.frame_bottom, command=lambda : self.transfer(mode=0), text="Shallow Copy")
-        self.button_deep_copy = tk.Button(self.frame_bottom, command=lambda: self.transfer(mode=2), text="Deep Copy")
-        self.button_shallow_cut = tk.Button(self.frame_bottom, command=lambda:self.transfer(mode=1), text="Shallow Cut")
-        self.button_deep_cut = tk.Button(self.frame_bottom,command=lambda: self.transfer(mode=3), text="Deep Cut")
+        self.button_shallow_copy = tk.Button(self.frame_bottom, command=lambda : self.transfer(mode=TransferMode.SHALLOW_COPY), text="Shallow Copy")
+        self.button_deep_copy = tk.Button(self.frame_bottom, command=lambda: self.transfer(mode=TransferMode.DEEP_COPY), text="Deep Copy")
+        self.button_shallow_cut = tk.Button(self.frame_bottom, command=lambda:self.transfer(mode=TransferMode.SHALLOW_MOVE), text="Shallow Cut")
+        self.button_deep_cut = tk.Button(self.frame_bottom,command=lambda: self.transfer(mode=TransferMode.DEEP_MOVE), text="Deep Cut")
         self.button_add_source = tk.Button(
             self.frame_bottom,
             command=self.add_source_address,
@@ -155,14 +155,29 @@ class FileOrganizerGUI:
         self.source_listbox.delete(0, tk.END)
         self.source_addresses_list = []
 
+
     def add_source_address(self):
-        """Adds a source address to the source listbox and list."""
-        source_path = Path(self.entry_source_file_address.get())
-        if source_path:
-            self.source_addresses_list.append(source_path)
-            self.source_listbox.insert(tk.END, source_path)
-            self.label_message_label.configure(text=f"The address is added", fg="blue")
-            self.entry_source_file_address.delete(0, tk.END)
+        raw_value = self.entry_source_file_address.get().strip()
+
+        if not raw_value:
+            messagebox.showerror("Error", "Source path cannot be empty.")
+            return
+
+        try:
+            source_path = FileOrganizerLogic.validate_source_path(raw_value)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+            return
+
+        source_path_str = str(source_path)
+
+        if source_path_str in self.source_addresses_list:
+            messagebox.showinfo("Info", "This source path is already in the list.")
+            return
+
+        self.source_addresses_list.append(source_path_str)
+        self.source_listbox.insert(tk.END, source_path_str)
+        self.entry_source_file_address.delete(0, tk.END)
 
 
     def disable_and_enable(self, mode, *widgets):
@@ -185,7 +200,7 @@ class FileOrganizerGUI:
     def set_status(self, text, color="black"):
         self.label_message_label.config(text=text, fg=color)
 
-    def transfer(self, mode):
+    def transfer(self, mode: TransferMode):
         """
         Start the file creation at the Distination Path, and transfer files from
         Source Path.
@@ -196,11 +211,40 @@ class FileOrganizerGUI:
         self.distination_path = Path(self.entry_distination_file_address.get())
         
         try:
-            # Check both address fron tk entries.
-            self.controller.check_path(source_path=self.source_path, 
-                                    destination_path=self.distination_path, 
-                                    list_address=self.source_addresses_list, 
-                                    roots="b")
+            try:
+                if self.source_addresses_list:
+                    self.distination_path = FileOrganizerLogic.validate_destination_path(
+                        self.distination_path
+                    )
+
+                    for address in self.source_addresses_list:
+                        source_path = FileOrganizerLogic.validate_source_path(address)
+                        FileOrganizerLogic.validate_source_destination_relation(
+                            source_path,
+                            self.distination_path
+                        )
+
+                    FileOrganizerLogic.check_disk_space_for_multiple_sources(
+                        self.source_addresses_list,
+                        self.distination_path,
+                        mode
+                    )
+
+                else:
+                    self.source_path, self.distination_path = FileOrganizerLogic.check_path(
+                        self.source_path,
+                        self.distination_path
+                    )
+
+                    FileOrganizerLogic.check_disk_space(
+                        self.source_path,
+                        self.distination_path,
+                        mode
+                    )
+
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+                return
             
             # Set the app folder name to the distination adress.
             self.distination_path = self.distination_path / self.distination_file_name
@@ -208,8 +252,20 @@ class FileOrganizerGUI:
             # Create folders if not exists.
             self.controller.create_category_directories(self.distination_path)
         
-            # Check if Distination path have space
-            FileOrganizerLogic.check_disk_space(self.source_path, self.distination_path)
+            # Check if the distination path have enough space for transfering files from source path.
+            if self.source_addresses_list:
+                FileOrganizerLogic.check_disk_space_for_multiple_sources(
+                    self.source_addresses_list,
+                    self.distination_path,
+                    mode
+                )
+            else:
+                FileOrganizerLogic.check_disk_space(
+                    self.source_path,
+                    self.distination_path,
+                    mode
+                )
+
         
             # Disable all buttons when app wants to start transfering files.
             self.disable_and_enable(

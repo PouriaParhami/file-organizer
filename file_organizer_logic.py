@@ -4,11 +4,7 @@ from pathlib import Path
 from file_organizer_custom_exceptions import (
     BothPathWrong, DestinationPathWrong, SourcePathWrong, NotEnoughSpace
     )
-
-# TODO change the static methods name
-# TODO handel static method exception in one uper level
-# TODO is shutil can raise error if the file in source and distination paht have same name?
-# TODO Create deep copy and deep move logic
+from transfer_mode import TransferMode
 
 class FileOrganizerLogic:
 
@@ -34,54 +30,79 @@ class FileOrganizerLogic:
     TRANSFER_LIST = []
 
     @staticmethod
-    def check_path(
-            source_path:Path, 
-            destination_path:Path, 
-            list_address:list=None, 
-            roots:str="b"
-            ) -> None:
-        """
-        This decorator check address's come from two entry.
-        Address must be absolute path.
+    def normalize_path(path_value) -> Path:
+        return Path(path_value).expanduser().resolve()
 
-        Args:
-            source_path: Path obj
-                source folder path
+    @classmethod
+    def validate_source_path(cls, source_path) -> Path:
+        path = cls.normalize_path(source_path)
 
-            destination_path: Path obj
-                destination folder path
+        if not path.exists():
+            raise InvalidSourcePath(f"Source path does not exist: {path}")
 
-            list_address: list
-                A list contain source folders path
+        if not path.is_dir():
+            raise InvalidSourcePath(f"Source path is not a directory: {path}")
 
-            roots: str
-                b: Check both tk entry
-                s: Check source tk entry
-                d: Check distination tk entry
-        Return:
-            None
-            
-        """
-        # Check both path from tk entries.
-        if roots == "b":
-            if list_address:
-                if not destination_path.is_absolute():
-                    raise DestinationPathWrong
-            else:
-                if (
-                    not destination_path.is_absolute()
-                    or not source_path.is_absolute()
-                ):
-                    raise BothPathWrong
-        # Check only source input folder path.
-        elif roots == "s":
-            if not source_path.is_absolute():
-                raise SourcePathWrong
-        # Check only destination input folder path.
-        elif roots == "d":
-            if not destination_path.is_absolute():
-                raise DestinationPathWrong
+        return path
+
+    @classmethod
+    def validate_destination_path(cls, destination_path) -> Path:
+        path = cls.normalize_path(destination_path)
+
+        if path.exists() and not path.is_dir():
+            raise InvalidDistinationPath(
+                f"Destination path is not a directory: {path}"
+            )
+
+        return path
     
+    @staticmethod
+    def validate_source_destination_relation(source_path: Path, destination_path: Path) -> None:
+        if source_path == destination_path:
+            raise PathError("Source and destination cannot be the same.")
+
+        if destination_path in source_path.parents:
+            raise PathError("Destination cannot be a parent of source.")
+
+        if source_path in destination_path.parents:
+            raise PathError("Destination cannot be inside source.")
+
+    @classmethod
+    def check_path(cls, source_path, destination_path):
+        valid_source = cls.validate_source_path(source_path)
+        valid_destination = cls.validate_destination_path(destination_path)
+        cls.validate_source_destination_relation(valid_source, valid_destination)
+
+        return valid_source, valid_destination
+    
+    @staticmethod
+    def get_total_size_of_files(source_path: Path, transfering_mode: TransferMode) -> int:
+        items, _ = FileOrganizerLogic.transfer_set_setting(transfering_mode, source_path)
+        total_size = 0
+
+        for item in items:
+            if item.is_file():
+                try:
+                    total_size += item.stat().st_size
+                except OSError:
+                    continue
+
+        return total_size
+
+    @classmethod
+    def get_total_size_of_multiple_sources(cls, source_paths: list, transfering_mode: TransferMode) -> int:
+        total_size = 0
+
+        for source in source_paths:
+            total_size += cls.get_total_size_of_files(Path(source), transfering_mode)
+
+        return total_size
+
+    @classmethod
+    def are_on_same_drive(cls, source_path: Path, destination_path: Path) -> bool:
+        return source_path.drive.lower() == destination_path.drive.lower()
+
+
     @staticmethod
     def get_folder_size(folder_path:Path) -> int:
         """
@@ -106,25 +127,53 @@ class FileOrganizerLogic:
 
 
     @classmethod
-    def check_disk_space(cls, source_path:Path, destination_pth:Path) -> None:
-        """
-        Retrieves free space information for the given path.
+    def check_disk_space(
+        cls,
+        source_path: Path,
+        destination_path: Path,
+        transfering_mode: TransferMode
+    ) -> None:
+        _, use_move = cls.transfer_set_setting(transfering_mode, source_path)
 
-        """
-        try:
-            destination_total, destination_used, destination_free = shutil.disk_usage(destination_pth)
-            source_total_size = cls.get_folder_size(source_path)
-            
-        except FileNotFoundError as e:
-            raise FileNotFoundError
-        
-        if source_total_size >= destination_free:
-            raise NotEnoughSpace
-            
+        if use_move and cls.are_on_same_drive(source_path, destination_path):
+            return
 
-        # if destination_free < 1024 * 1024 * 100:
-        #     raise NotEnoughSpace("Not enough disk space availible in destination path.")
-            
+        total_size = cls.get_total_size_of_files(source_path, transfering_mode)
+        free_space = shutil.disk_usage(destination_path).free
+
+        if total_size > free_space:
+            raise InsufficientSpaceError("There is not enough free space in destination.")
+
+    @classmethod
+    def check_disk_space_for_multiple_sources(
+        cls,
+        source_paths: list,
+        destination_path: Path,
+        transfering_mode: TransferMode
+    ) -> None:
+        needs_space_check = False
+
+        for source in source_paths:
+            source_path = Path(source)
+            _, use_move = cls.transfer_set_setting(transfering_mode, source_path)
+
+            if not use_move:
+                needs_space_check = True
+                break
+
+            if not cls.are_on_same_drive(source_path, destination_path):
+                needs_space_check = True
+                break
+
+        if not needs_space_check:
+            return
+
+        total_size = cls.get_total_size_of_multiple_sources(source_paths, transfering_mode)
+        free_space = shutil.disk_usage(destination_path).free
+
+        if total_size > free_space:
+            raise InsufficientSpaceError("There is not enough free space in destination.")
+
     @classmethod
     def create_category_directories(cls, distination_path: str) -> None:
         """
@@ -142,7 +191,7 @@ class FileOrganizerLogic:
             self,
             source_path_list: list,
             destination_path: Path,
-            mode: int,
+            mode: TransferMode,
             progress_callback=None
         ) -> None:
         for address in source_path_list:
@@ -170,39 +219,31 @@ class FileOrganizerLogic:
                 return destination_file 
     
     @staticmethod
-    def transfer_set_setting(transfer_mode:int, address: Path) -> tuple:
+    def transfer_set_setting(transfer_mode: TransferMode, address: Path) -> tuple:
         """
-        Set useing move or copy and see the currend dir or dir + all sub dirs
+        Decide whether files should be copied or moved,
+        and whether search should be shallow or deep.
+        """
 
-        Args:
-            transfer_mode: int
-                0: shallow copy (use copy and only see the dir root)
-                1: shallow cut (use move and only see the dir rooe)
-                2: deep copy (use copy and see root and all sub dirs)
-                3: deep cut (use move and see root and all sub dirs)
-        
-        Returns:
-            items, use_move as tuple
-        """
-        # Shallow Copy
-        if transfer_mode == 0:
-            items = (address).glob("*")
+        if transfer_mode == TransferMode.SHALLOW_COPY:
+            items = address.glob("*")
             use_move = False
-        # Shallow Cut
-        elif transfer_mode == 1:
-            items = (address).glob("*")
+
+        elif transfer_mode == TransferMode.SHALLOW_MOVE:
+            items = address.glob("*")
             use_move = True
-        # Deep Copy
-        elif transfer_mode == 2:
-            items = (address).rglob("*")
+
+        elif transfer_mode == TransferMode.DEEP_COPY:
+            items = address.rglob("*")
             use_move = False
-        # Deep Cut
-        elif transfer_mode == 3:
-            items = (address).rglob("*")
+
+        elif transfer_mode == TransferMode.DEEP_MOVE:
+            items = address.rglob("*")
             use_move = True
+
         else:
-            raise ValueError("Invalid transfering_mode")
-        
+            raise ValueError(f"Invalid transfer mode: {transfer_mode}")
+
         return items, use_move
 
     @classmethod
@@ -230,7 +271,7 @@ class FileOrganizerLogic:
             self,
             distination_path: Path,
             source_path: Path,
-            transfering_mode: int,
+            transfering_mode: TransferMode,
             progress_callback=None
         ) -> None:
         """
