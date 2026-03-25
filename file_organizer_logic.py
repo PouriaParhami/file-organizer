@@ -138,22 +138,20 @@ class FileOrganizerLogic:
             (distination_path / category).mkdir(parents=True, exist_ok=True)
 
 
-    def multi_search_and_categorize_files(self, 
-                                        source_path_list:list, 
-                                        destination_path:Path,
-                                        mode,
-                                        progressbar
-                                        ) -> None:
-        """
-        Read address's from the listbox and call search_and_categorize_files method
-        on them.
-        """
-        # list(map(lambda address: self.search_and_categorize_files(destination_path, Path(address), progressbar), source_path_list))
+    def multi_search_and_categorize_files(
+            self,
+            source_path_list: list,
+            destination_path: Path,
+            mode: int,
+            progress_callback=None
+        ) -> None:
         for address in source_path_list:
-            self.search_and_categorize_files(destination_path, 
-                                        Path(address),
-                                        mode,
-                                        progressbar)
+            self.search_and_categorize_files(
+                destination_path,
+                Path(address),
+                mode,
+                progress_callback
+            )
         
 
     @staticmethod
@@ -229,64 +227,55 @@ class FileOrganizerLogic:
 
 
     def search_and_categorize_files(
-        self, distination_path: str, source_path: str, transfering_mode:int, progress_bar
-    ) -> None:
+            self,
+            distination_path: Path,
+            source_path: Path,
+            transfering_mode: int,
+            progress_callback=None
+        ) -> None:
         """
-        Search all files in all folders from source path and move them to the distination file path.
+        Search all files in source path and move/copy them to categorized folders.
+        """
 
-        Args:
-            distination_path: str
-                Distination folder address.
-            source_path: str
-                Source folder Address.
-        """
-    
-        # Set setting for transfering files.
         items, use_move = self.transfer_set_setting(transfering_mode, source_path)
-        # Set progress bar settings
         total_files = self.get_number_of_files(source_path, transfering_mode)
         current_file_count = 0
-        progress_bar["maximum"] = 100
-        progress_bar.start()
-        
 
-        # Shallow Copy. Do not going into the folders.
+        if progress_callback:
+            progress_callback(0)
+
         for item in items:
-            # In shallow copy and cut we do not touch the folders
             if item.is_dir():
                 continue
-            else:
-                # Its a file
-                
-                for category, extentions in self.FILE_CATEGORIES.items():
-                    if item.suffix in extentions:
-                        try:
-                            
-                            destination = self.create_new_file_name(distination_path, category, item)
-                            if use_move:
-                                shutil.move(item, destination)
-                            else:
-                                shutil.copy(item, destination)
-                            
-                            print(item)
-                            self.TRANSFER_LIST.append(item.name)
 
-                            current_file_count += 1
-                            progress = (current_file_count / total_files) * 100
-                            progress_bar["value"] = progress
-                            progress_bar.update()
-                            
-                        except shutil.SameFileError:
-                            raise shutil.SameFileError
-                        
-                        except shutil.Error as e:
-                            # Re-raise the error if it's not a "destination exists" error
-                            raise e  # Important to re-raise for unexpected errors
-            
-        
-        progress_bar.stop()
-        progress_bar["value"] = 0
-            
+            for category, extentions in self.FILE_CATEGORIES.items():
+                if item.suffix in extentions:
+                    try:
+                        destination = self.create_new_file_name(distination_path, category, item)
+
+                        if use_move:
+                            shutil.move(item, destination)
+                        else:
+                            shutil.copy(item, destination)
+
+                        print(item)
+                        self.TRANSFER_LIST.append(item.name)
+
+                        current_file_count += 1
+                        progress = (current_file_count / total_files) * 100 if total_files > 0 else 0
+
+                        if progress_callback:
+                            progress_callback(progress)
+
+                    except shutil.SameFileError:
+                        raise shutil.SameFileError
+
+                    except shutil.Error as e:
+                        raise e
+
+        if progress_callback:
+            progress_callback(100)
+                
 
 if __name__ == "__main__":
     print("It seems you need to use me in other class!")

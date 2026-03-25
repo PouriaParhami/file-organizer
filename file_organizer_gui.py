@@ -139,12 +139,12 @@ class FileOrganizerGUI:
             row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=5
         )
         self.button_clear_list.grid(
-            row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=5
+            row=1, column=0, sticky=tk.W + tk.E, padx=2, pady=5
         )
-        self.button_shallow_copy.grid(row=1, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
-        self.button_deep_copy.grid(row=2, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
-        self.button_shallow_cut.grid(row=3, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
-        self.button_deep_cut.grid(row=4, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_shallow_copy.grid(row=2, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_deep_copy.grid(row=3, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_shallow_cut.grid(row=4, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_deep_cut.grid(row=5, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
 
         # Progress Bar
         self.progress_bar.grid(
@@ -165,11 +165,25 @@ class FileOrganizerGUI:
             self.entry_source_file_address.delete(0, tk.END)
 
 
-    def desable_and_enable(mode, *args):
+    def disable_and_enable(self, mode, *widgets):
         if mode == 0:
-            [key.config(state=tk.DISABLED) for key in args]
+            for widget in widgets:
+                widget.config(state=tk.DISABLED)
         elif mode == 1:
-            [key.config(state=tk.NORMAL) for key in args]
+            for widget in widgets:
+                widget.config(state=tk.NORMAL)
+
+    def run_on_ui_thread(self, callback, *args, **kwargs):
+        self.master_window.after(0, lambda: callback(*args, **kwargs))
+
+    def update_progress(self, value):
+        self.progress_bar["value"] = value
+
+    def safe_update_progress(self, value):
+        self.run_on_ui_thread(self.update_progress, value)
+
+    def set_status(self, text, color="black"):
+        self.label_message_label.config(text=text, fg=color)
 
     def transfer(self, mode):
         """
@@ -198,7 +212,7 @@ class FileOrganizerGUI:
             FileOrganizerLogic.check_disk_space(self.source_path, self.distination_path)
         
             # Disable all buttons when app wants to start transfering files.
-            self.desable_and_enable(
+            self.disable_and_enable(
                 0,
                 self.button_add_source,
                 self.button_deep_copy,
@@ -213,36 +227,44 @@ class FileOrganizerGUI:
 
             # Create a thread
             def worker():
-                
                 try:
-                    self.label_message_label.config(text="Transfering Files Please Wait ...", fg="black")
+                    self.run_on_ui_thread(
+                        self.set_status,
+                        "Transfering Files Please Wait ...",
+                        "black"
+                    )
 
-                    # We have list of source addresses
                     if self.source_addresses_list:
-                        
                         self.controller.multi_search_and_categorize_files(
-                            self.source_addresses_list, 
+                            self.source_addresses_list,
                             self.distination_path,
                             mode,
-                            self.progress_bar
-                            )
-                        
+                            self.safe_update_progress
+                        )
+
+                        self.run_on_ui_thread(self.source_listbox.delete, 0, tk.END)
                         self.source_addresses_list = []
-                        self.source_listbox.delete(0, tk.END)
-                        self.label_message_label.config(text="Transfering is DONE!", fg="green")
-                    
-                    # Only one source address exist
+
                     else:
                         self.controller.search_and_categorize_files(
-                            self.distination_path, self.source_path, mode, self.progress_bar
+                            self.distination_path,
+                            self.source_path,
+                            mode,
+                            self.safe_update_progress
                         )
-                        self.label_message_label.config(text="Transfering is DONE!", fg="green")
+
+                    self.run_on_ui_thread(
+                        self.set_status,
+                        "Transfering is DONE!",
+                        "green"
+                    )
+
                 except Exception as e:
-                    messagebox.showerror("Error", str(e))
-                    raise e
-                # Buttons back to normal.
+                    self.run_on_ui_thread(messagebox.showerror, "Error", str(e))
+
                 finally:
-                    self.desable_and_enable(
+                    self.run_on_ui_thread(
+                        self.disable_and_enable,
                         1,
                         self.button_add_source,
                         self.button_deep_copy,
@@ -251,12 +273,15 @@ class FileOrganizerGUI:
                         self.button_shallow_cut
                     )
 
+                    self.run_on_ui_thread(self.update_progress, 0)
+
                     msgreport = "\n".join([x for x in FileOrganizerLogic.TRANSFER_LIST])
                     with open(".\\report.txt", "w") as report:
                         report.write(msgreport)
-                        
-                    messagebox.showinfo("Files", "Report is created!")
+
+                    self.run_on_ui_thread(messagebox.showinfo, "Files", "Report is created!")
                     
+                                
 
             thread = threading.Thread(target=worker)
             thread.start()
