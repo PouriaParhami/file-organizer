@@ -5,29 +5,19 @@ from file_organizer_custom_exceptions import (
     BothPathWrong, DestinationPathWrong, SourcePathWrong, NotEnoughSpace
     )
 from transfer_mode import TransferMode
+from transfer_result import TransferResult
 
 class FileOrganizerLogic:
 
     FILE_CATEGORIES = {
-        "images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".svg", ".webp"],
-        "documents": [
-            ".pdf",
-            ".doc",
-            ".docx",
-            ".txt",
-            ".xls",
-            ".xlsx",
-            ".ppt",
-            ".pptx",
-            ".csv",
-        ],
-        "videos": [".mp4", ".mkv", ".avi", ".mov", ".wmv"],
-        "audio": [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"],
-        "archives": [".zip", ".rar", ".tar", ".gz", ".7z", ".iso"],
-        "programs": [".exe"],
-        "folders": [],
-        }
-    TRANSFER_LIST = []
+    "images": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"},
+    "documents": {".pdf", ".doc", ".docx", ".txt", ".xlsx", ".xls", ".ppt", ".pptx", ".csv"},
+    "audio": {".mp3", ".wav", ".aac", ".flac"},
+    "video": {".mp4", ".mkv", ".avi", ".mov"},
+    "archives": {".zip", ".rar", ".7z", ".tar", ".gz"},
+    "scripts": {".py", ".js", ".html", ".css", ".json", ".xml"},
+    "others": set()
+    }
 
     @staticmethod
     def normalize_path(path_value) -> Path:
@@ -188,35 +178,42 @@ class FileOrganizerLogic:
 
 
     def multi_search_and_categorize_files(
-            self,
-            source_path_list: list,
-            destination_path: Path,
-            mode: TransferMode,
-            progress_callback=None
-        ) -> None:
+        self,
+        source_path_list: list,
+        destination_path: Path,
+        mode,
+        progress_callback=None
+    ) -> TransferResult:
+        final_result = TransferResult()
+
         for address in source_path_list:
-            self.search_and_categorize_files(
+            partial_result = self.search_and_categorize_files(
                 destination_path,
                 Path(address),
                 mode,
                 progress_callback
             )
-        
+
+            final_result.transferred_files.extend(partial_result.transferred_files)
+            final_result.skipped_files.extend(partial_result.skipped_files)
+            final_result.errors.extend(partial_result.errors)
+
+        return final_result
+            
 
     @staticmethod
-    def create_new_file_name(distination_path, category, item):
-        """
-        Create new file name by adding number.
-        """
+    def create_new_file_name(destination_path: Path, category: str, item: Path) -> Path:
+        category_path = destination_path / category
+        category_path.mkdir(parents=True, exist_ok=True)
+
+        new_file_path = category_path / item.name
         counter = 1
-        destination_file = distination_path / category / item.name
-        while True:
-            if Path.exists(destination_file):
-                new_filename = f"{item.stem}_{counter}{item.suffix}"
-                destination_file = distination_path / category / new_filename
-                counter += 1
-            else:
-                return destination_file 
+
+        while new_file_path.exists():
+            new_file_path = category_path / f"{item.stem}_{counter}{item.suffix}"
+            counter += 1
+
+        return new_file_path
     
     @staticmethod
     def transfer_set_setting(transfer_mode: TransferMode, address: Path) -> tuple:
@@ -266,14 +263,25 @@ class FileOrganizerLogic:
 
         return total_files
 
+    def get_file_category(cls, file_path: Path) -> str:
+        suffix = file_path.suffix.lower()
 
+        for category, extensions in cls.FILE_CATEGORIES.items():
+            if category == "others":
+                continue
+
+            if suffix in extensions:
+                return category
+
+        return "others"
+    
     def search_and_categorize_files(
             self,
             distination_path: Path,
             source_path: Path,
             transfering_mode: TransferMode,
             progress_callback=None
-        ) -> None:
+        ) -> TransferResult:
         """
         Search all files in source path and move/copy them to categorized folders.
         """
@@ -281,6 +289,7 @@ class FileOrganizerLogic:
         items, use_move = self.transfer_set_setting(transfering_mode, source_path)
         total_files = self.get_number_of_files(source_path, transfering_mode)
         current_file_count = 0
+        result = TransferResult()
 
         if progress_callback:
             progress_callback(0)
@@ -289,30 +298,34 @@ class FileOrganizerLogic:
             if item.is_dir():
                 continue
 
-            for category, extentions in self.FILE_CATEGORIES.items():
-                if item.suffix in extentions:
-                    try:
-                        destination = self.create_new_file_name(distination_path, category, item)
+            category = self.get_file_category(item)
 
-                        if use_move:
-                            shutil.move(item, destination)
-                        else:
-                            shutil.copy(item, destination)
+            try:
+                destination = self.create_new_file_name(
+                    distination_path,
+                    category,
+                    item
+                )
 
-                        print(item)
-                        self.TRANSFER_LIST.append(item.name)
+                if use_move:
+                    shutil.move(item, destination)
+                else:
+                    shutil.copy2(item, destination)
 
-                        current_file_count += 1
-                        progress = (current_file_count / total_files) * 100 if total_files > 0 else 0
+                result.add_transferred(item.name)
 
-                        if progress_callback:
-                            progress_callback(progress)
+            except shutil.SameFileError:
+                result.add_error(f"Same file error: {item}")
+            except shutil.Error as e:
+                result.add_error(f"Shutil error for {item}: {e}")
+            except Exception as e:
+                result.add_error(f"Unexpected error for {item}: {e}")
 
-                    except shutil.SameFileError:
-                        raise shutil.SameFileError
+            current_file_count += 1
+            progress = (current_file_count / total_files) * 100 if total_files > 0 else 0
 
-                    except shutil.Error as e:
-                        raise e
+            if progress_callback:
+                progress_callback(progress)
 
         if progress_callback:
             progress_callback(100)

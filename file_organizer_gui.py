@@ -8,6 +8,7 @@ from file_organizer_custom_exceptions import (
     BothPathWrong, DestinationPathWrong, SourcePathWrong, NotEnoughSpace
     )
 from transfer_mode import TransferMode
+from report_writer import ReportWriter
 
 class FileOrganizerGUI:
     """
@@ -23,6 +24,8 @@ class FileOrganizerGUI:
         self.master_window.title("Auto File Organizer")
         self.master_window.resizable(width=False, height=False)
         # self.master_window.geometry("600x400")
+
+        self.last_result = None
 
         # Initilize attribiutes
         self.distination_file_name = "file_organizer"
@@ -155,6 +158,8 @@ class FileOrganizerGUI:
         self.source_listbox.delete(0, tk.END)
         self.source_addresses_list = []
 
+    def get_report_path(self):
+        return Path(".\\report.txt")
 
     def add_source_address(self):
         raw_value = self.entry_source_file_address.get().strip()
@@ -291,7 +296,7 @@ class FileOrganizerGUI:
                     )
 
                     if self.source_addresses_list:
-                        self.controller.multi_search_and_categorize_files(
+                        self.last_result = self.controller.multi_search_and_categorize_files(
                             self.source_addresses_list,
                             self.distination_path,
                             mode,
@@ -302,7 +307,7 @@ class FileOrganizerGUI:
                         self.source_addresses_list = []
 
                     else:
-                        self.controller.search_and_categorize_files(
+                        self.last_result = self.controller.search_and_categorize_files(
                             self.distination_path,
                             self.source_path,
                             mode,
@@ -331,13 +336,27 @@ class FileOrganizerGUI:
 
                     self.run_on_ui_thread(self.update_progress, 0)
 
-                    msgreport = "\n".join([x for x in FileOrganizerLogic.TRANSFER_LIST])
-                    with open(".\\report.txt", "w") as report:
-                        report.write(msgreport)
+                    if self.last_result is not None:
+                        try:
+                            report_path = self.get_report_path()
+                            ReportWriter.write_text_report(self.last_result, report_path)
+                            self.run_on_ui_thread(
+                                messagebox.showinfo,
+                                "Report",
+                                f"Report created successfully:\n{report_path}"
+                            )
+                        except Exception as e:
+                            self.run_on_ui_thread(
+                                messagebox.showerror,
+                                "Report Error",
+                                str(e)
+                            )
 
                     self.run_on_ui_thread(messagebox.showinfo, "Files", "Report is created!")
+
                     
-                                
+                    
+                    self.last_result = None
 
             thread = threading.Thread(target=worker)
             thread.start()
