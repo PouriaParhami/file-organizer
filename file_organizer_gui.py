@@ -5,10 +5,15 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from file_organizer_logic import FileOrganizerLogic
 from file_organizer_custom_exceptions import (
-    BothPathWrong, DestinationPathWrong, SourcePathWrong, NotEnoughSpace
-    )
+        InvalidDestinationPath,
+        InvalidSourcePath,
+        InsufficientSpaceError,
+            PathError,
+        FileOrganizerError,
+)
 from transfer_mode import TransferMode
 from report_writer import ReportWriter
+
 
 class FileOrganizerGUI:
     """
@@ -27,7 +32,7 @@ class FileOrganizerGUI:
 
         self.last_result = None
 
-        # Initilize attribiutes
+        # initialize attribiutes
         self.distination_file_name = "file_organizer"
         self.distination_path = Path()
         self.source_path = Path()
@@ -40,8 +45,7 @@ class FileOrganizerGUI:
         self.define_widgets()
 
         # Put the widgets on the root or window
-        self.initilize_positioning_of_widgets()
-
+        self.initialize_positioning_of_widgets()
 
     def define_widgets(self):
         """
@@ -73,28 +77,45 @@ class FileOrganizerGUI:
         )
 
         # Entrys
-        self.entry_distination_file_address = tk.Entry(self.frame_left)
+        self.entry_destination_address = tk.Entry(self.frame_left)
         self.entry_source_file_address = tk.Entry(self.frame_left)
 
         # Buttons
-        self.button_shallow_copy = tk.Button(self.frame_bottom, command=lambda : self.transfer(mode=TransferMode.SHALLOW_COPY), text="Shallow Copy")
-        self.button_deep_copy = tk.Button(self.frame_bottom, command=lambda: self.transfer(mode=TransferMode.DEEP_COPY), text="Deep Copy")
-        self.button_shallow_cut = tk.Button(self.frame_bottom, command=lambda:self.transfer(mode=TransferMode.SHALLOW_MOVE), text="Shallow Cut")
-        self.button_deep_cut = tk.Button(self.frame_bottom,command=lambda: self.transfer(mode=TransferMode.DEEP_MOVE), text="Deep Cut")
+        self.button_shallow_copy = tk.Button(
+            self.frame_bottom,
+            command=lambda: self.transfer(mode=TransferMode.SHALLOW_COPY),
+            text="Shallow Copy",
+        )
+        self.button_deep_copy = tk.Button(
+            self.frame_bottom,
+            command=lambda: self.transfer(mode=TransferMode.DEEP_COPY),
+            text="Deep Copy",
+        )
+        self.button_shallow_cut = tk.Button(
+            self.frame_bottom,
+            command=lambda: self.transfer(mode=TransferMode.SHALLOW_MOVE),
+            text="Shallow Cut",
+        )
+        self.button_deep_cut = tk.Button(
+            self.frame_bottom,
+            command=lambda: self.transfer(mode=TransferMode.DEEP_MOVE),
+            text="Deep Cut",
+        )
         self.button_add_source = tk.Button(
             self.frame_bottom,
             command=self.add_source_address,
             text="Add Source Address",
         )
-        self.button_clear_list = tk.Button(self.frame_bottom, command=self.clear_list, text="clear list")
+        self.button_clear_list = tk.Button(
+            self.frame_bottom, command=self.clear_list, text="clear list"
+        )
 
         # Progress Bar
         self.progress_bar = ttk.Progressbar(
             self.frame_right, orient="horizontal", length=300, mode="determinate"
         )
 
-
-    def initilize_positioning_of_widgets(self):
+    def initialize_positioning_of_widgets(self):
         """
         Set Position of each widget in the root and frames
         """
@@ -133,20 +154,20 @@ class FileOrganizerGUI:
         self.entry_source_file_address.grid(
             row=0, column=1, columnspan=2, sticky=tk.W + tk.E, padx=5, pady=10
         )
-        self.entry_distination_file_address.grid(
+        self.entry_destination_address.grid(
             row=1, column=1, columnspan=2, sticky=tk.W + tk.E, padx=5, pady=10
         )
 
         # Button
-        self.button_add_source.grid(
-            row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=5
+        self.button_add_source.grid(row=0, column=0, sticky=tk.W + tk.E, padx=2, pady=5)
+        self.button_clear_list.grid(row=1, column=0, sticky=tk.W + tk.E, padx=2, pady=5)
+        self.button_shallow_copy.grid(
+            row=2, column=0, sticky=tk.W + tk.E, padx=2, pady=10
         )
-        self.button_clear_list.grid(
-            row=1, column=0, sticky=tk.W + tk.E, padx=2, pady=5
-        )
-        self.button_shallow_copy.grid(row=2, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
         self.button_deep_copy.grid(row=3, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
-        self.button_shallow_cut.grid(row=4, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
+        self.button_shallow_cut.grid(
+            row=4, column=0, sticky=tk.W + tk.E, padx=2, pady=10
+        )
         self.button_deep_cut.grid(row=5, column=0, sticky=tk.W + tk.E, padx=2, pady=10)
 
         # Progress Bar
@@ -154,6 +175,28 @@ class FileOrganizerGUI:
             row=1, column=0, columnspan=2, sticky=tk.W + tk.E, padx=5, pady=5
         )
 
+    def handle_gui_error(self, error: Exception):
+        
+        self.set_status("Operation failed.", "red")
+        
+        if isinstance(error, InvalidSourcePath):
+            messagebox.showerror("Invalid Source", str(error))
+
+        elif isinstance(error, InvalidDestinationPath):
+            messagebox.showerror("Invalid Destination", str(error))
+
+        elif isinstance(error, InsufficientSpaceError):
+            messagebox.showerror("Insufficient Disk Space", str(error))
+
+        elif isinstance(error, PathError):
+            messagebox.showerror("Path Error", str(error))
+
+        elif isinstance(error, FileOrganizerError):
+            messagebox.showerror("Application Error", str(error))
+
+        else:
+            messagebox.showerror("Unexpected Error", f"An unexpected error occurred:\n{error}")
+    
     def clear_list(self):
         self.source_listbox.delete(0, tk.END)
         self.source_addresses_list = []
@@ -171,7 +214,7 @@ class FileOrganizerGUI:
         try:
             source_path = FileOrganizerLogic.validate_source_path(raw_value)
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            self.handle_gui_error(e)
             return
 
         source_path_str = str(source_path)
@@ -183,7 +226,6 @@ class FileOrganizerGUI:
         self.source_addresses_list.append(source_path_str)
         self.source_listbox.insert(tk.END, source_path_str)
         self.entry_source_file_address.delete(0, tk.END)
-
 
     def disable_and_enable(self, mode, *widgets):
         if mode == 0:
@@ -205,176 +247,137 @@ class FileOrganizerGUI:
     def set_status(self, text, color="black"):
         self.label_message_label.config(text=text, fg=color)
 
-    def transfer(self, mode: TransferMode):
-        """
-        Start the file creation at the Distination Path, and transfer files from
-        Source Path.
-        """
-        
-        # Convert str address to the Path object and keep then in the attributes.
-        self.source_path = Path(self.entry_source_file_address.get())
-        self.distination_path = Path(self.entry_distination_file_address.get())
-        
-        try:
-            try:
-                if self.source_addresses_list:
-                    self.distination_path = FileOrganizerLogic.validate_destination_path(
-                        self.distination_path
-                    )
+    def read_paths_from_inputs(self):
+        source_value = self.entry_source_file_address.get().strip()
+        destination_value = self.entry_destination_address.get().strip()
+        return source_value, destination_value
+    
+    def has_multiple_sources(self) -> bool:
+        return len(self.source_addresses_list) > 0
+    
+    def prepare_multi_source_transfer(self, transfer_mode):
+        self.destination_path = FileOrganizerLogic.validate_destination_path(
+            self.destination_path
+        )
 
-                    for address in self.source_addresses_list:
-                        source_path = FileOrganizerLogic.validate_source_path(address)
-                        FileOrganizerLogic.validate_source_destination_relation(
-                            source_path,
-                            self.distination_path
-                        )
-
-                    FileOrganizerLogic.check_disk_space_for_multiple_sources(
-                        self.source_addresses_list,
-                        self.distination_path,
-                        mode
-                    )
-
-                else:
-                    self.source_path, self.distination_path = FileOrganizerLogic.check_path(
-                        self.source_path,
-                        self.distination_path
-                    )
-
-                    FileOrganizerLogic.check_disk_space(
-                        self.source_path,
-                        self.distination_path,
-                        mode
-                    )
-
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
-                return
-            
-            # Set the app folder name to the distination adress.
-            self.distination_path = self.distination_path / self.distination_file_name
-
-            # Create folders if not exists.
-            self.controller.create_category_directories(self.distination_path)
-        
-            # Check if the distination path have enough space for transfering files from source path.
-            if self.source_addresses_list:
-                FileOrganizerLogic.check_disk_space_for_multiple_sources(
-                    self.source_addresses_list,
-                    self.distination_path,
-                    mode
-                )
-            else:
-                FileOrganizerLogic.check_disk_space(
-                    self.source_path,
-                    self.distination_path,
-                    mode
-                )
-
-        
-            # Disable all buttons when app wants to start transfering files.
-            self.disable_and_enable(
-                0,
-                self.button_add_source,
-                self.button_deep_copy,
-                self.button_deep_cut,
-                self.button_shallow_copy,
-                self.button_shallow_cut
+        for address in self.source_addresses_list:
+            source_path = FileOrganizerLogic.validate_source_path(address)
+            FileOrganizerLogic.validate_source_destination_relation(
+                source_path,
+                self.destination_path
             )
-            self.label_message_label.config(text="Transfering files...", fg="black")
-            # self.progress_bar["maximum"] = 100
-            # self.progress_bar.start()
-            
 
-            # Create a thread
-            def worker():
-                try:
-                    self.run_on_ui_thread(
-                        self.set_status,
-                        "Transfering Files Please Wait ...",
-                        "black"
-                    )
-
-                    if self.source_addresses_list:
-                        self.last_result = self.controller.multi_search_and_categorize_files(
-                            self.source_addresses_list,
-                            self.distination_path,
-                            mode,
-                            self.safe_update_progress
-                        )
-
-                        self.run_on_ui_thread(self.source_listbox.delete, 0, tk.END)
-                        self.source_addresses_list = []
-
-                    else:
-                        self.last_result = self.controller.search_and_categorize_files(
-                            self.distination_path,
-                            self.source_path,
-                            mode,
-                            self.safe_update_progress
-                        )
-
-                    self.run_on_ui_thread(
-                        self.set_status,
-                        "Transfering is DONE!",
-                        "green"
-                    )
-
-                except Exception as e:
-                    self.run_on_ui_thread(messagebox.showerror, "Error", str(e))
-
-                finally:
-                    self.run_on_ui_thread(
-                        self.disable_and_enable,
-                        1,
-                        self.button_add_source,
-                        self.button_deep_copy,
-                        self.button_deep_cut,
-                        self.button_shallow_copy,
-                        self.button_shallow_cut
-                    )
-
-                    self.run_on_ui_thread(self.update_progress, 0)
-
-                    if self.last_result is not None:
-                        try:
-                            report_path = self.get_report_path()
-                            ReportWriter.write_text_report(self.last_result, report_path)
-                            self.run_on_ui_thread(
-                                messagebox.showinfo,
-                                "Report",
-                                f"Report created successfully:\n{report_path}"
-                            )
-                        except Exception as e:
-                            self.run_on_ui_thread(
-                                messagebox.showerror,
-                                "Report Error",
-                                str(e)
-                            )
-
-                    self.run_on_ui_thread(messagebox.showinfo, "Files", "Report is created!")
-
-                    
-                    
-                    self.last_result = None
-
-            thread = threading.Thread(target=worker)
-            thread.start()
-
-        except BothPathWrong:
-            messagebox.showerror("Path Error", "Please check your Both address's. They must be Absoulute Path")
-        except DestinationPathWrong:
-            messagebox.showerror("Path Error", "Please check your Destination address's.")
-        except SourcePathWrong:
-            messagebox.showerror("Path Error", "Please check your Source address's.")
-        except shutil.SameFileError:
-            messagebox.showerror("Error", )
-        except FileNotFoundError:
-            messagebox.showerror("FileError", "Your address is not exist!")
-        except NotEnoughSpace:
-            messagebox.showerror("SpaceError", "Your destination file do not have enough space for transfering source data to it.")
-        except Exception as e:
-            raise e
-            
-
+        self.controller.check_disk_space_for_multiple_sources(
+            self.source_addresses_list,
+            self.destination_path,
+            transfer_mode
+        )
         
+    def prepare_transfer(self, transfer_mode):
+        if self.has_multiple_sources():
+            self.prepare_multi_source_transfer(transfer_mode)
+        else:
+            self.prepare_single_source_transfer(transfer_mode)
+            
+    def set_action_buttons_state(self, enabled: bool):
+        widgets = (
+            self.button_add_source,
+            self.button_deep_copy,
+            self.button_deep_cut,
+            self.button_shallow_copy,
+            self.button_shallow_cut,
+        )
+
+        state_mode = 1 if enabled else 0
+        self.disable_and_enable(state_mode, *widgets)
+    
+    def start_transfer_thread(self, transfer_mode):
+        thread = threading.Thread(
+            target=lambda: self.worker(transfer_mode),
+            daemon=True
+        )
+        thread.start()
+    
+    def prepare_single_source_transfer(self, transfer_mode):
+        self.source_path, self.destination_path = FileOrganizerLogic.check_path(
+            self.source_path,
+            self.destination_path
+        )
+
+        self.controller.check_disk_space(
+            self.source_path,
+            self.destination_path,
+            transfer_mode
+        )
+    
+    def worker(self, transfer_mode):
+        try:
+            self.run_on_ui_thread(
+                self.set_status,
+                "Transfering Files Please Wait ...",
+                "black"
+            )
+
+            if self.has_multiple_sources():
+                self.last_result = self.controller.multi_search_and_categorize_files(
+                    self.source_addresses_list,
+                    self.destination_path,
+                    transfer_mode,
+                    self.safe_update_progress
+                )
+
+                self.run_on_ui_thread(self.source_listbox.delete, 0, tk.END)
+                self.source_addresses_list = []
+
+            else:
+                self.last_result = self.controller.search_and_categorize_files(
+                    self.destination_path,
+                    self.source_path,
+                    transfer_mode,
+                    self.safe_update_progress
+                )
+
+            self.run_on_ui_thread(
+                self.set_status,
+                "Transfering is DONE!",
+                "green"
+            )
+
+        except Exception as e:
+            self.run_on_ui_thread(self.handle_gui_error, e)
+
+        finally:
+            self.run_on_ui_thread(self.set_action_buttons_state, True)
+            self.run_on_ui_thread(self.update_progress, 0)
+
+            if self.last_result is not None:
+                try:
+                    report_path = self.get_report_path()
+                    ReportWriter.write_text_report(self.last_result, report_path)
+                    self.run_on_ui_thread(
+                        messagebox.showinfo,
+                        "Report",
+                        f"Report created successfully:\n{report_path}"
+                    )
+                except Exception as e:
+                    self.run_on_ui_thread(
+                        messagebox.showerror,
+                        "Report Error",
+                        str(e)
+                    )
+    
+    def transfer(self, mode: TransferMode):
+        self.last_result = None
+
+        source_value, destination_value = self.read_paths_from_inputs()
+        self.source_path = source_value
+        self.destination_path = destination_value
+
+        try:
+            self.prepare_transfer(mode)
+        except Exception as e:
+            self.handle_gui_error(e)
+            return
+
+        self.set_action_buttons_state(False)
+        self.start_transfer_thread(mode)

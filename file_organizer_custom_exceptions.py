@@ -1,16 +1,19 @@
-class BothPathWrong(Exception):
-    """Custom exception for when both addresses are invalid."""
+class FileOrganizerError(Exception):
+    """Base exception for file organizer application."""
     pass
 
-class DestinationPathWrong(Exception):
-    """Custom exception for when Destination addresses are invalid."""
+
+class InvalidSourcePath(FileOrganizerError):
     pass
 
-class SourcePathWrong(Exception):
-    """Custom exception for when seouce addresses are invalid."""
+
+class InvalidDestinationPath(FileOrganizerError):
     pass
 
-class NotEnoughSpace(Exception):
-    """Custom exception for when Destination path do not have enough space."""
+
+class PathError(FileOrganizerError):
     pass
 
+
+class InsufficientSpaceError(FileOrganizerError):
+    pass
