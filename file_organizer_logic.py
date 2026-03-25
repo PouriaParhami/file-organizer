@@ -12,6 +12,7 @@ from transfer_result import TransferResult
 from transfer_plan import TransferPlan
 
 class FileOrganizerLogic:
+    """Core business logic for validating, planning, and transferring files."""
 
     FILE_CATEGORIES = {
         "images": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"},
@@ -35,10 +36,24 @@ class FileOrganizerLogic:
 
     @staticmethod
     def normalize_path(path_value) -> Path:
+        """Expand and resolve a user-provided path value into a `Path` object."""
         return Path(path_value).expanduser().resolve()
 
     @classmethod
+    def collect_files(cls, source_path: Path, transfer_mode: TransferMode) -> list[Path]:
+        """Return only file items selected by the given transfer mode."""
+        transfer_plan = cls.build_transfer_plan(transfer_mode, source_path)
+        files = []
+
+        for item in transfer_plan.items:
+            if item.is_file():
+                files.append(item)
+
+        return files
+    
+    @classmethod
     def validate_source_path(cls, source_path) -> Path:
+        """Validate that the source exists and points to a directory."""
         path = cls.normalize_path(source_path)
 
         if not path.exists():
@@ -51,6 +66,7 @@ class FileOrganizerLogic:
 
     @classmethod
     def validate_destination_path(cls, destination_path) -> Path:
+        """Validate that the destination is a directory path or a creatable directory."""
         path = cls.normalize_path(destination_path)
 
         if path.exists() and not path.is_dir():
@@ -62,6 +78,7 @@ class FileOrganizerLogic:
     def validate_source_destination_relation(
         source_path: Path, destination_path: Path
     ) -> None:
+        """Ensure source and destination do not overlap in unsafe ways."""
         if source_path == destination_path:
             raise PathError("Source and destination cannot be the same.")
 
@@ -73,18 +90,33 @@ class FileOrganizerLogic:
 
     @classmethod
     def check_path(cls, source_path, destination_path):
+        """Validate both paths and return their normalized `Path` objects."""
         valid_source = cls.validate_source_path(source_path)
         valid_destination = cls.validate_destination_path(destination_path)
         cls.validate_source_destination_relation(valid_source, valid_destination)
 
         return valid_source, valid_destination
 
+    @staticmethod
+    def get_total_size_of_files_from_list(files: list[Path]) -> int:
+        """Return the cumulative size of the provided files in bytes."""
+        total_size = 0
 
+        for file_path in files:
+            try:
+                total_size += file_path.stat().st_size
+            except OSError:
+                continue
+
+        return total_size
+    
+    
     def collect_files_from_multiple_sources(
         self,
         source_paths: list,
         transfer_mode: TransferMode
     ) -> list[Path]:
+        """Collect files from multiple source directories into one list."""
         all_files = []
 
         for source in source_paths:
@@ -94,6 +126,7 @@ class FileOrganizerLogic:
         return all_files
         
     def get_total_size_of_files(self, source_path: Path, transfer_mode: TransferMode) -> int:
+        """Calculate the total size of files selected from a single source."""
         files = self.collect_files(source_path, transfer_mode)
         return self.get_total_size_of_files_from_list(files)
 
@@ -101,6 +134,7 @@ class FileOrganizerLogic:
     def get_total_size_of_multiple_sources(
         cls, source_paths: list, transfer_mode: TransferMode
     ) -> int:
+        """Calculate the total size of files across multiple source directories."""
         total_size = 0
 
         for source in source_paths:
@@ -110,20 +144,13 @@ class FileOrganizerLogic:
 
     @classmethod
     def are_on_same_drive(cls, source_path: Path, destination_path: Path) -> bool:
+        """Return `True` when source and destination are on the same drive."""
         return source_path.drive.lower() == destination_path.drive.lower()
 
     @staticmethod
     def get_folder_size(folder_path: Path) -> int:
         """
-        Calcuate total size of a path (it suppose to be a foler.)
-
-        Args:
-            folder_path: Path obj
-                Address of your folder
-
-        Return:
-            total_size: int
-                Total size of folder
+        Calculate the total size of all non-symlink files under a folder.
         """
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(folder_path):
@@ -141,9 +168,12 @@ class FileOrganizerLogic:
         destination_path: Path,
         transfer_mode: TransferMode
     ) -> None:
+        """Ensure the destination has enough free space for a single-source transfer."""
         transfer_plan = self.build_transfer_plan(transfer_mode, source_path)
         use_move = transfer_plan.use_move
 
+        # Moving on the same drive usually only updates directory entries, so a
+        # full free-space check is not necessary in that case.
         if use_move and self.are_on_same_drive(source_path, destination_path):
             return
 
@@ -154,30 +184,30 @@ class FileOrganizerLogic:
         if total_size > free_space:
             raise InsufficientSpaceError("There is not enough free space in destination.")
 
-    @classmethod
+    
     def check_disk_space_for_multiple_sources(
-        cls, source_paths: list, destination_path: Path, transfer_mode: TransferMode
+        self, source_paths: list, destination_path: Path, transfer_mode: TransferMode
     ) -> None:
+        """Ensure the destination has enough free space for a multi-source transfer."""
         needs_space_check = False
 
         for source in source_paths:
             source_path = Path(source)
-            transfer_plan = cls.build_transfer_plan(transfer_mode, source_path)
-            items = transfer_plan.items
+            transfer_plan = self.build_transfer_plan(transfer_mode, source_path)
             use_move = transfer_plan.use_move
 
             if not use_move:
                 needs_space_check = True
                 break
 
-            if not cls.are_on_same_drive(source_path, destination_path):
+            if not self.are_on_same_drive(source_path, destination_path):
                 needs_space_check = True
                 break
 
         if not needs_space_check:
             return
 
-        total_size = cls.get_total_size_of_multiple_sources(source_paths, transfer_mode)
+        total_size = self.get_total_size_of_multiple_sources(source_paths, transfer_mode)
         free_space = shutil.disk_usage(destination_path).free
 
         if total_size > free_space:
@@ -188,11 +218,7 @@ class FileOrganizerLogic:
     @classmethod
     def create_category_directories(cls, destination_path: str) -> None:
         """
-        Create all empty directories in distination path.
-
-        Args:
-            destination_path: str
-                Distination folder address.
+        Create the category folders under the destination path.
         """
         for category, _ in cls.FILE_CATEGORIES.items():
             (destination_path / category).mkdir(parents=True, exist_ok=True)
@@ -204,6 +230,7 @@ class FileOrganizerLogic:
         mode,
         progress_callback=None,
     ) -> TransferResult:
+        """Run the transfer workflow for multiple sources and combine their results."""
         final_result = TransferResult()
 
         for address in source_path_list:
@@ -219,12 +246,14 @@ class FileOrganizerLogic:
 
     @staticmethod
     def create_new_file_name(destination_path: Path, category: str, item: Path) -> Path:
+        """Create a unique destination file path inside the chosen category folder."""
         category_path = destination_path / category
         category_path.mkdir(parents=True, exist_ok=True)
 
         new_file_path = category_path / item.name
         counter = 1
 
+        # Add a numeric suffix until an unused file name is found.
         while new_file_path.exists():
             new_file_path = category_path / f"{item.stem}_{counter}{item.suffix}"
             counter += 1
@@ -233,6 +262,7 @@ class FileOrganizerLogic:
 
     @staticmethod
     def build_transfer_plan(transfer_mode: TransferMode, source_path: Path) -> TransferPlan:
+        """Translate a transfer mode into item discovery behavior and move/copy intent."""
         if transfer_mode == TransferMode.SHALLOW_COPY:
             items = source_path.glob("*")
             use_move = False
@@ -256,10 +286,13 @@ class FileOrganizerLogic:
 
     @classmethod
     def get_number_of_files(self, source_path: Path, transfer_mode: TransferMode) -> int:
+        """Return the number of files selected from a source by the transfer mode."""
         files = self.collect_files(source_path, transfer_mode)
         return len(files)
 
+    @classmethod
     def get_file_category(cls, file_path: Path) -> str:
+        """Map a file extension to one of the configured destination categories."""
         suffix = file_path.suffix.lower()
 
         for category, extensions in cls.FILE_CATEGORIES.items():
@@ -277,6 +310,7 @@ class FileOrganizerLogic:
         destination_root: Path,
         use_move: bool
         ) -> Path:
+        """Copy or move one file into its categorized destination folder."""
         category = self.get_file_category(source_file)
         destination_file = self.create_new_file_name(
             destination_root,
@@ -291,15 +325,7 @@ class FileOrganizerLogic:
 
         return destination_file
     
-    def collect_files(self, source_path: Path, transfer_mode: TransferMode) -> list[Path]:
-        transfer_plan = self.build_transfer_plan(transfer_mode, source_path)
-        files = []
-
-        for item in transfer_plan.items:
-            if item.is_file():
-                files.append(item)
-
-        return files
+    
     
     def search_and_categorize_files(
         self,
@@ -308,6 +334,7 @@ class FileOrganizerLogic:
         transfer_mode: TransferMode,
         progress_callback=None
     ) -> TransferResult:
+        """Transfer files from one source directory into categorized destination folders."""
         result = TransferResult()
 
         transfer_plan = self.build_transfer_plan(transfer_mode, source_path)
@@ -320,6 +347,8 @@ class FileOrganizerLogic:
 
         for item in files:
             try:
+                # Each file is processed independently so one failure does not
+                # stop the rest of the transfer.
                 self.transfer_single_file(
                     source_file=item,
                     destination_root=destination_path,

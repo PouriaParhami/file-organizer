@@ -17,12 +17,11 @@ from report_writer import ReportWriter
 
 class FileOrganizerGUI:
     """
-    Handel GUI and Logic of the File organizer program.
-    Detect and organize your files in folders in to six
-    Category folders.
+    Tkinter user interface for validating paths and launching file transfers.
     """
 
     def __init__(self, master_window):
+        """Initialize the window, application state, and all UI widgets."""
 
         # Define and initialize basic setting of root or window
         self.master_window = master_window
@@ -48,9 +47,7 @@ class FileOrganizerGUI:
         self.initialize_positioning_of_widgets()
 
     def define_widgets(self):
-        """
-        Define all widgets
-        """
+        """Create all frames, labels, entries, buttons, and progress widgets."""
 
         self.frame_top = tk.Frame(self.master_window, width=800, height=100)
         self.frame_mid = tk.Frame(self.master_window, width=800, height=200)
@@ -116,9 +113,7 @@ class FileOrganizerGUI:
         )
 
     def initialize_positioning_of_widgets(self):
-        """
-        Set Position of each widget in the root and frames
-        """
+        """Lay out the GUI widgets inside the main window."""
 
         # Frames
         self.frame_top.grid(row=0, column=0, sticky="nsew")
@@ -176,7 +171,7 @@ class FileOrganizerGUI:
         )
 
     def handle_gui_error(self, error: Exception):
-        
+        """Display user-friendly error dialogs for known application exceptions."""
         self.set_status("Operation failed.", "red")
         
         if isinstance(error, InvalidSourcePath):
@@ -196,15 +191,19 @@ class FileOrganizerGUI:
 
         else:
             messagebox.showerror("Unexpected Error", f"An unexpected error occurred:\n{error}")
+            raise error
     
     def clear_list(self):
+        """Clear the multi-source selection list from the GUI and memory."""
         self.source_listbox.delete(0, tk.END)
         self.source_addresses_list = []
 
     def get_report_path(self):
+        """Return the default output path for the transfer report."""
         return Path(".\\report.txt")
 
     def add_source_address(self):
+        """Validate and append a source path to the multi-source list."""
         raw_value = self.entry_source_file_address.get().strip()
 
         if not raw_value:
@@ -228,6 +227,7 @@ class FileOrganizerGUI:
         self.entry_source_file_address.delete(0, tk.END)
 
     def disable_and_enable(self, mode, *widgets):
+        """Toggle a group of widgets between enabled and disabled states."""
         if mode == 0:
             for widget in widgets:
                 widget.config(state=tk.DISABLED)
@@ -236,26 +236,33 @@ class FileOrganizerGUI:
                 widget.config(state=tk.NORMAL)
 
     def run_on_ui_thread(self, callback, *args, **kwargs):
+        """Schedule a callback to run safely on the Tkinter event loop."""
         self.master_window.after(0, lambda: callback(*args, **kwargs))
 
     def update_progress(self, value):
+        """Set the progress bar to the provided percentage value."""
         self.progress_bar["value"] = value
 
     def safe_update_progress(self, value):
+        """Update progress from a worker thread through the UI thread."""
         self.run_on_ui_thread(self.update_progress, value)
 
     def set_status(self, text, color="black"):
+        """Update the status label text and its foreground color."""
         self.label_message_label.config(text=text, fg=color)
 
     def read_paths_from_inputs(self):
+        """Read source and destination values from the text entry fields."""
         source_value = self.entry_source_file_address.get().strip()
         destination_value = self.entry_destination_address.get().strip()
         return source_value, destination_value
     
     def has_multiple_sources(self) -> bool:
+        """Return `True` when the listbox contains one or more source folders."""
         return len(self.source_addresses_list) > 0
     
     def prepare_multi_source_transfer(self, transfer_mode):
+        """Validate inputs and disk space requirements for multi-source transfers."""
         self.destination_path = FileOrganizerLogic.validate_destination_path(
             self.destination_path
         )
@@ -274,12 +281,14 @@ class FileOrganizerGUI:
         )
         
     def prepare_transfer(self, transfer_mode):
+        """Choose the correct preparation flow based on single or multiple sources."""
         if self.has_multiple_sources():
             self.prepare_multi_source_transfer(transfer_mode)
         else:
             self.prepare_single_source_transfer(transfer_mode)
             
     def set_action_buttons_state(self, enabled: bool):
+        """Enable or disable transfer actions while work is in progress."""
         widgets = (
             self.button_add_source,
             self.button_deep_copy,
@@ -292,6 +301,7 @@ class FileOrganizerGUI:
         self.disable_and_enable(state_mode, *widgets)
     
     def start_transfer_thread(self, transfer_mode):
+        """Start the transfer worker on a background thread to keep the UI responsive."""
         thread = threading.Thread(
             target=lambda: self.worker(transfer_mode),
             daemon=True
@@ -299,6 +309,7 @@ class FileOrganizerGUI:
         thread.start()
     
     def prepare_single_source_transfer(self, transfer_mode):
+        """Validate inputs and disk space requirements for single-source transfers."""
         self.source_path, self.destination_path = FileOrganizerLogic.check_path(
             self.source_path,
             self.destination_path
@@ -311,6 +322,7 @@ class FileOrganizerGUI:
         )
     
     def worker(self, transfer_mode):
+        """Execute the transfer workflow and report results back to the UI."""
         try:
             self.run_on_ui_thread(
                 self.set_status,
@@ -319,6 +331,7 @@ class FileOrganizerGUI:
             )
 
             if self.has_multiple_sources():
+                # Process each queued source path and merge all transfer results.
                 self.last_result = self.controller.multi_search_and_categorize_files(
                     self.source_addresses_list,
                     self.destination_path,
@@ -351,6 +364,8 @@ class FileOrganizerGUI:
             self.run_on_ui_thread(self.update_progress, 0)
 
             if self.last_result is not None:
+                # The report is generated after every completed transfer so the
+                # user can review transferred files and errors immediately.
                 try:
                     report_path = self.get_report_path()
                     ReportWriter.write_text_report(self.last_result, report_path)
@@ -367,6 +382,7 @@ class FileOrganizerGUI:
                     )
     
     def transfer(self, mode: TransferMode):
+        """Read current inputs, validate them, and launch the transfer worker."""
         self.last_result = None
 
         source_value, destination_value = self.read_paths_from_inputs()
