@@ -1,42 +1,66 @@
 # Compiled Python code
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[codz]
+*$py.class
 
-# Virtual environment
+# Virtual environments
 .venv/
+.venv
 venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
-# IDE-specific files
+# IDE and editor files
 .idea/
 *.iml
-*.ipdb
+.vscode/
+.spyderproject
+.spyproject
+.ropeproject
 
 # OS-specific files
 .DS_Store
 
 # Log files
 *.log
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Data files (if not versioned)
-data/
-
-# Temporary files
+# Temporary and cache files
 tmp/
 temp/
+.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
 
 # Build artifacts
-dist/
 build/
+dist/
+*.egg-info/
+.eggs/
 
-# Secrets and credentials (VERY IMPORTANT!)
+# Notebook and tool caches
+.ipynb_checkpoints
+
+# Secrets and credentials
 *.env
+.env
+.envrc
 secrets.txt
 config.ini
 
-# Files for test
+# Local project artifacts
+data/
+report.txt
 test.py
 helper_functions.py
-report.txt

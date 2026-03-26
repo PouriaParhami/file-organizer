@@ -108,37 +108,37 @@ file_organizer/
 ### Part 1: Classes and Their Responsibilities
 
 #### `FileOrganizerGUI`
-Defined in [`file_organizer_gui.py`](d:/workspace/programming/cli/file_organizer/file_organizer_gui.py).
+Defined in `file_organizer_gui.py`.
 
 This class manages the Tkinter user interface and coordinates user actions with the business logic layer. It collects input paths, starts transfers on a background thread, updates progress safely on the UI thread, and displays success or error messages.
 
 #### `FileOrganizerLogic`
-Defined in [`file_organizer_logic.py`](d:/workspace/programming/cli/file_organizer/file_organizer_logic.py).
+Defined in `file_organizer_logic.py`.
 
 This is the core service class of the application. It validates paths, builds transfer plans, calculates file sizes, checks disk space, determines file categories, performs copy or move operations, and returns transfer results.
 
 #### `ReportWriter`
-Defined in [`report_writer.py`](d:/workspace/programming/cli/file_organizer/report_writer.py).
+Defined in `report_writer.py`.
 
 This utility class converts a `TransferResult` into a plain-text report and writes it to disk.
 
 #### `TransferResult`
-Defined in [`transfer_result.py`](d:/workspace/programming/cli/file_organizer/transfer_result.py).
+Defined in `transfer_result.py`.
 
 This dataclass stores the outcome of a transfer operation, including transferred files, skipped files, and errors.
 
 #### `TransferPlan`
-Defined in [`transfer_plan.py`](d:/workspace/programming/cli/file_organizer/transfer_plan.py).
+Defined in `transfer_plan.py`.
 
 This dataclass represents the result of transfer planning. It stores the iterable collection of discovered items and a boolean flag indicating whether the operation is a move.
 
 #### `TransferMode`
-Defined in [`transfer_mode.py`](d:/workspace/programming/cli/file_organizer/transfer_mode.py).
+Defined in `transfer_mode.py`.
 
 This enum defines the four supported transfer strategies: shallow copy, shallow move, deep copy, and deep move.
 
 #### `FileOrganizerError` and custom exceptions
-Defined in [`file_organizer_custom_exceptions.py`](d:/workspace/programming/cli/file_organizer/file_organizer_custom_exceptions.py).
+Defined in `file_organizer_custom_exceptions.py`.
 
 These classes define application-specific exceptions used to communicate validation and runtime errors more clearly:
 
@@ -258,4 +258,4 @@ python main.py
 
 ## License
 
-No license file is currently included in the repository. If you plan to share or publish this project, adding a license such as MIT would be a good next step.
+This project is licensed under the MIT License. See the `LICENSE` file for details.
