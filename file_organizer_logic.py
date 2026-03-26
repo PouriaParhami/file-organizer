@@ -14,6 +14,8 @@ from transfer_plan import TransferPlan
 class FileOrganizerLogic:
     """Core business logic for validating, planning, and transferring files."""
 
+    ORGANIZED_FOLDER_NAME = "file_organizer"
+
     FILE_CATEGORIES = {
         "images": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"},
         "documents": {
@@ -157,6 +159,11 @@ class FileOrganizerLogic:
         return current_path
 
     @classmethod
+    def get_organized_root(cls, destination_path: Path) -> Path:
+        """Return the root folder that will contain all categorized files."""
+        return destination_path / cls.ORGANIZED_FOLDER_NAME
+
+    @classmethod
     def are_on_same_drive(cls, source_path: Path, destination_path: Path) -> bool:
         """Return `True` when source and destination are on the same drive."""
         return source_path.drive.lower() == destination_path.drive.lower()
@@ -236,6 +243,8 @@ class FileOrganizerLogic:
         """
         Create the category folders under the destination path.
         """
+        destination_path = cls.get_organized_root(destination_path)
+
         for category, _ in cls.FILE_CATEGORIES.items():
             (destination_path / category).mkdir(parents=True, exist_ok=True)
 
@@ -328,8 +337,9 @@ class FileOrganizerLogic:
         ) -> Path:
         """Copy or move one file into its categorized destination folder."""
         category = self.get_file_category(source_file)
+        organized_root = self.get_organized_root(destination_root)
         destination_file = self.create_new_file_name(
-            destination_root,
+            organized_root,
             category,
             source_file
         )
