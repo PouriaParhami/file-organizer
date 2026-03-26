@@ -125,10 +125,11 @@ class FileOrganizerLogic:
 
         return all_files
         
-    def get_total_size_of_files(self, source_path: Path, transfer_mode: TransferMode) -> int:
+    @classmethod
+    def get_total_size_of_files(cls, source_path: Path, transfer_mode: TransferMode) -> int:
         """Calculate the total size of files selected from a single source."""
-        files = self.collect_files(source_path, transfer_mode)
-        return self.get_total_size_of_files_from_list(files)
+        files = cls.collect_files(source_path, transfer_mode)
+        return cls.get_total_size_of_files_from_list(files)
 
     @classmethod
     def get_total_size_of_multiple_sources(
@@ -141,6 +142,19 @@ class FileOrganizerLogic:
             total_size += cls.get_total_size_of_files(Path(source), transfer_mode)
 
         return total_size
+
+    @staticmethod
+    def get_disk_usage_target(path: Path) -> Path:
+        """Return an existing path that can be used for disk usage checks."""
+        current_path = path
+
+        while not current_path.exists():
+            parent = current_path.parent
+            if parent == current_path:
+                raise FileNotFoundError(f"Could not resolve an existing path for: {path}")
+            current_path = parent
+
+        return current_path
 
     @classmethod
     def are_on_same_drive(cls, source_path: Path, destination_path: Path) -> bool:
@@ -179,7 +193,8 @@ class FileOrganizerLogic:
 
         files = self.collect_files(source_path, transfer_mode)
         total_size = self.get_total_size_of_files_from_list(files)
-        free_space = shutil.disk_usage(destination_path).free
+        disk_usage_target = self.get_disk_usage_target(destination_path)
+        free_space = shutil.disk_usage(disk_usage_target).free
 
         if total_size > free_space:
             raise InsufficientSpaceError("There is not enough free space in destination.")
@@ -208,7 +223,8 @@ class FileOrganizerLogic:
             return
 
         total_size = self.get_total_size_of_multiple_sources(source_paths, transfer_mode)
-        free_space = shutil.disk_usage(destination_path).free
+        disk_usage_target = self.get_disk_usage_target(destination_path)
+        free_space = shutil.disk_usage(disk_usage_target).free
 
         if total_size > free_space:
             raise InsufficientSpaceError(
@@ -216,7 +232,7 @@ class FileOrganizerLogic:
             )
 
     @classmethod
-    def create_category_directories(cls, destination_path: str) -> None:
+    def create_category_directories(cls, destination_path: Path) -> None:
         """
         Create the category folders under the destination path.
         """
